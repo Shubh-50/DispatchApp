@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Windows.Forms;
 using System.IO;
+using System.Windows.Forms;
 
 namespace BarcodeBartenderApp
 {
@@ -9,7 +9,6 @@ namespace BarcodeBartenderApp
         private string baseFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "BarcodeApp");
-
         private string sopFolder = "";
 
         public AdminForm()
@@ -18,59 +17,44 @@ namespace BarcodeBartenderApp
             sopFolder = Path.Combine(baseFolder, "SOP");
             if (!Directory.Exists(sopFolder))
                 Directory.CreateDirectory(sopFolder);
-
             LoadUsers();
             LoadEmailSettings();
             LoadShiftSettings();
             LoadParts();
+            LoadPrinterConfig();
         }
 
-        // ================= USER =================
+        // ===== USER =====
 
         private void LoadUsers()
         {
             lstUsers.Items.Clear();
-            foreach (var user in DatabaseHelper.GetUsers())
-                lstUsers.Items.Add(user);
+            foreach (var u in DatabaseHelper.GetUsers())
+                lstUsers.Items.Add(u);
         }
 
         private void btnAdd_Click(object sender, EventArgs e)
         {
             string user = txtUser.Text.Trim();
             string pass = txtPass.Text.Trim();
-
             if (user == "" || pass == "")
-            {
-                MessageBox.Show("Enter username & password");
-                return;
-            }
-
+            { MessageBox.Show("Enter username & password"); return; }
             if (DatabaseHelper.AddUser(user, pass))
             {
                 MessageBox.Show("User Added ✅");
-                txtUser.Clear();
-                txtPass.Clear();
+                txtUser.Clear(); txtPass.Clear();
                 LoadUsers();
             }
-            else
-            {
-                MessageBox.Show("User already exists ❌");
-            }
+            else MessageBox.Show("User already exists ❌");
         }
 
         private void btnDelete_Click(object sender, EventArgs e)
         {
             if (lstUsers.SelectedItem == null) return;
-
             string user = lstUsers.SelectedItem?.ToString() ?? "";
-
             if (user == "admin")
-            {
-                MessageBox.Show("Admin cannot be deleted ❌");
-                return;
-            }
-
-            if (MessageBox.Show($"Delete user '{user}'?", "Confirm",
+            { MessageBox.Show("Admin cannot be deleted ❌"); return; }
+            if (MessageBox.Show($"Delete '{user}'?", "Confirm",
                 MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
                 DatabaseHelper.DeleteUser(user);
@@ -79,14 +63,14 @@ namespace BarcodeBartenderApp
             }
         }
 
-        // ================= EMAIL =================
+        // ===== EMAIL =====
 
         private void LoadEmailSettings()
         {
-            var (sender, password, receiver) = DatabaseHelper.GetEmailSettings();
-            txtSender.Text = sender;
-            txtPassword.Text = password;
-            txtReceiver.Text = receiver;
+            var (s, p, r) = DatabaseHelper.GetEmailSettings();
+            txtSender.Text = s;
+            txtPassword.Text = p;
+            txtReceiver.Text = r;
         }
 
         private void btnSaveEmail_Click(object sender, EventArgs e)
@@ -98,7 +82,7 @@ namespace BarcodeBartenderApp
             MessageBox.Show("Email Settings Saved ✅");
         }
 
-        // ================= SHIFT =================
+        // ===== SHIFT =====
 
         private void LoadShiftSettings()
         {
@@ -106,97 +90,86 @@ namespace BarcodeBartenderApp
             foreach (var s in shifts)
             {
                 if (s.shift == "A")
-                {
-                    txtAStart.Text = s.start.ToString(@"hh\:mm");
-                    txtAEnd.Text = s.end.ToString(@"hh\:mm");
-                }
+                { txtAStart.Text = s.start.ToString(@"hh\:mm"); txtAEnd.Text = s.end.ToString(@"hh\:mm"); }
                 else if (s.shift == "B")
-                {
-                    txtBStart.Text = s.start.ToString(@"hh\:mm");
-                    txtBEnd.Text = s.end.ToString(@"hh\:mm");
-                }
+                { txtBStart.Text = s.start.ToString(@"hh\:mm"); txtBEnd.Text = s.end.ToString(@"hh\:mm"); }
                 else if (s.shift == "C")
-                {
-                    txtCStart.Text = s.start.ToString(@"hh\:mm");
-                    txtCEnd.Text = s.end.ToString(@"hh\:mm");
-                }
+                { txtCStart.Text = s.start.ToString(@"hh\:mm"); txtCEnd.Text = s.end.ToString(@"hh\:mm"); }
             }
+
+            // Load targets
+            txtTargetA.Text = DatabaseHelper.GetShiftTarget("A").ToString();
+            txtTargetB.Text = DatabaseHelper.GetShiftTarget("B").ToString();
+            txtTargetC.Text = DatabaseHelper.GetShiftTarget("C").ToString();
         }
 
         private void btnSaveShift_Click(object sender, EventArgs e)
         {
             try
             {
-                string aStart = txtAStart.Text.Replace('.', ':');
-                string aEnd = txtAEnd.Text.Replace('.', ':');
-                string bStart = txtBStart.Text.Replace('.', ':');
-                string bEnd = txtBEnd.Text.Replace('.', ':');
-                string cStart = txtCStart.Text.Replace('.', ':');
-                string cEnd = txtCEnd.Text.Replace('.', ':');
+                string aS = txtAStart.Text.Replace('.', ':');
+                string aE = txtAEnd.Text.Replace('.', ':');
+                string bS = txtBStart.Text.Replace('.', ':');
+                string bE = txtBEnd.Text.Replace('.', ':');
+                string cS = txtCStart.Text.Replace('.', ':');
+                string cE = txtCEnd.Text.Replace('.', ':');
 
-                TimeSpan.Parse(aStart);
-                TimeSpan.Parse(aEnd);
-                TimeSpan.Parse(bStart);
-                TimeSpan.Parse(bEnd);
-                TimeSpan.Parse(cStart);
-                TimeSpan.Parse(cEnd);
+                TimeSpan.Parse(aS); TimeSpan.Parse(aE);
+                TimeSpan.Parse(bS); TimeSpan.Parse(bE);
+                TimeSpan.Parse(cS); TimeSpan.Parse(cE);
 
-                DatabaseHelper.UpdateShift("A", aStart, aEnd);
-                DatabaseHelper.UpdateShift("B", bStart, bEnd);
-                DatabaseHelper.UpdateShift("C", cStart, cEnd);
+                DatabaseHelper.UpdateShift("A", aS, aE);
+                DatabaseHelper.UpdateShift("B", bS, bE);
+                DatabaseHelper.UpdateShift("C", cS, cE);
 
-                MessageBox.Show("Shift timings updated ✅");
+                int tA = int.TryParse(txtTargetA.Text, out int ta) ? ta : 0;
+                int tB = int.TryParse(txtTargetB.Text, out int tb) ? tb : 0;
+                int tC = int.TryParse(txtTargetC.Text, out int tc) ? tc : 0;
+
+                DatabaseHelper.SaveShiftTarget("A", tA);
+                DatabaseHelper.SaveShiftTarget("B", tB);
+                DatabaseHelper.SaveShiftTarget("C", tC);
+
+                MessageBox.Show("Shift settings saved ✅");
             }
             catch
             {
-                MessageBox.Show("Enter time in HH:mm format (Example: 06:00)");
+                MessageBox.Show("Enter valid times (HH:mm) and numeric targets");
             }
         }
 
-        // ================= PART =================
+        // ===== PART =====
 
         private void LoadParts()
         {
             lstParts.Items.Clear();
             cmbPartSop.Items.Clear();
-
-            foreach (var part in DatabaseHelper.GetParts())
+            foreach (var p in DatabaseHelper.GetParts())
             {
-                lstParts.Items.Add(part);
-                cmbPartSop.Items.Add(part);
+                lstParts.Items.Add(p);
+                cmbPartSop.Items.Add(p);
             }
-
-            if (cmbPartSop.Items.Count > 0)
-                cmbPartSop.SelectedIndex = 0;
+            if (cmbPartSop.Items.Count > 0) cmbPartSop.SelectedIndex = 0;
         }
 
         private void btnAddPart_Click(object sender, EventArgs e)
         {
             string part = txtNewPart.Text.Trim();
             if (string.IsNullOrEmpty(part))
-            {
-                MessageBox.Show("Enter part name");
-                return;
-            }
-
+            { MessageBox.Show("Enter part name"); return; }
             if (DatabaseHelper.AddPart(part))
             {
                 MessageBox.Show("Part Added ✅");
                 txtNewPart.Clear();
                 LoadParts();
             }
-            else
-            {
-                MessageBox.Show("Part already exists ❌");
-            }
+            else MessageBox.Show("Part already exists ❌");
         }
 
         private void btnDeletePart_Click(object sender, EventArgs e)
         {
             if (lstParts.SelectedItem == null) return;
-
             string part = lstParts.SelectedItem?.ToString() ?? "";
-
             if (MessageBox.Show($"Delete part '{part}'?", "Confirm",
                 MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
@@ -206,41 +179,42 @@ namespace BarcodeBartenderApp
             }
         }
 
-        // ================= SOP PDF =================
+        // ===== SOP =====
 
         private void btnUploadPdf_Click(object sender, EventArgs e)
         {
             if (cmbPartSop.SelectedItem == null)
-            {
-                MessageBox.Show("Select a part first ❌");
-                return;
-            }
-
+            { MessageBox.Show("Select a part first ❌"); return; }
             string selectedPart = cmbPartSop.SelectedItem.ToString() ?? "";
-
-            OpenFileDialog ofd = new OpenFileDialog();
-            ofd.Filter = "PDF Files (*.pdf)|*.pdf";
-
+            var ofd = new OpenFileDialog { Filter = "PDF Files (*.pdf)|*.pdf" };
             if (ofd.ShowDialog() == DialogResult.OK)
             {
-                string destPath = Path.Combine(sopFolder,
+                string dest = Path.Combine(sopFolder,
                     selectedPart + "_" + Path.GetFileName(ofd.FileName));
-
-                File.Copy(ofd.FileName, destPath, true);
-                DatabaseHelper.SavePdfPath(selectedPart, destPath);
-
-                lblPdfName.Text = Path.GetFileName(destPath);
-                MessageBox.Show($"SOP uploaded for part '{selectedPart}' ✅");
-
+                File.Copy(ofd.FileName, dest, true);
+                DatabaseHelper.SavePdfPath(selectedPart, dest);
+                lblPdfName.Text = Path.GetFileName(dest);
+                MessageBox.Show($"SOP uploaded for '{selectedPart}' ✅");
                 foreach (Form f in Application.OpenForms)
-                {
-                    if (f is Form1 mainForm)
-                    {
-                        mainForm.BeginInvoke(new Action(() => mainForm.LoadPDF()));
-                        break;
-                    }
-                }
+                    if (f is Form1 mf)
+                    { mf.BeginInvoke(new Action(() => mf.LoadPDF())); break; }
             }
+        }
+
+        // ===== PRINTER CONFIG =====
+
+        private void LoadPrinterConfig()
+        {
+            txtPrinterName.Text = DatabaseHelper.GetConfig("PrinterShareName");
+        }
+
+        private void btnSavePrinter_Click(object sender, EventArgs e)
+        {
+            string name = txtPrinterName.Text.Trim();
+            if (string.IsNullOrEmpty(name))
+            { MessageBox.Show("Enter printer share name"); return; }
+            DatabaseHelper.SaveConfig("PrinterShareName", name);
+            MessageBox.Show("Printer name saved ✅");
         }
     }
 }

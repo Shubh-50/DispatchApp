@@ -1,37 +1,35 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Media;
 using System.Windows.Forms;
 
 namespace BarcodeBartenderApp
 {
     public partial class Form1 : Form
     {
-        private string printerShareName = "TSC_TE244";
-
+        private string printerShareName = "";
         private string baseFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            "BarcodeApp");
-
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BarcodeApp");
         private string prnPath = "";
         private int totalCount = 0;
         private int todayCount = 0;
+        private int shiftCount = 0;
+        private int shiftTarget = 0;
         private int serialNumber = 500;
-
         private string currentUser = "";
         private string currentShift = "";
         private string lastShift = "";
         private bool shiftMailSent = false;
-
         private System.Windows.Forms.Timer timerClock = new System.Windows.Forms.Timer();
 
         public Form1(string user)
         {
             InitializeComponent();
             currentUser = user;
+            printerShareName = DatabaseHelper.GetConfig("PrinterShareName");
             prnPath = Path.Combine(baseFolder, "label.prn");
             serialNumber = DatabaseHelper.GetSerial();
-
             timerClock.Interval = 1000;
             timerClock.Tick += TimerClock_Tick;
             timerClock.Start();
@@ -40,16 +38,16 @@ namespace BarcodeBartenderApp
         private void TimerClock_Tick(object? sender, EventArgs e)
         {
             lblDateTime.Text = DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss");
-
             string newShift = ShiftHelper.GetCurrentShift();
-
             if (newShift != lastShift)
             {
                 lastShift = newShift;
                 lblShift.Text = "Shift: " + newShift;
                 shiftMailSent = false;
+                shiftCount = DatabaseHelper.GetShiftCount(newShift);
+                shiftTarget = DatabaseHelper.GetShiftTarget(newShift);
+                UpdateProgress();
             }
-
             if (!shiftMailSent)
             {
                 SendShiftReport();
@@ -62,20 +60,24 @@ namespace BarcodeBartenderApp
             if (!Directory.Exists(baseFolder))
                 Directory.CreateDirectory(baseFolder);
 
+            this.Text = $"Packaging EOL System — {DatabaseHelper.AppVersion}";
             lblUser.Text = "User: " + currentUser;
             lblStatus.Text = "READY";
+            lblStatus.ForeColor = System.Drawing.Color.FromArgb(0, 120, 215);
 
             totalCount = DatabaseHelper.GetTotalCount();
             todayCount = DatabaseHelper.GetTodayCount();
+            currentShift = ShiftHelper.GetCurrentShift();
+            lastShift = currentShift;
+            shiftCount = DatabaseHelper.GetShiftCount(currentShift);
+            shiftTarget = DatabaseHelper.GetShiftTarget(currentShift);
 
             lblTotal.Text = $"Total: {totalCount}";
             lblToday.Text = $"Today: {todayCount}";
-
-            LoadParts();
-
-            currentShift = ShiftHelper.GetCurrentShift();
-            lastShift = currentShift;
             lblShift.Text = "Shift: " + currentShift;
+
+            UpdateProgress();
+            LoadParts();
 
             txtScan.Focus();
 
@@ -83,13 +85,12 @@ namespace BarcodeBartenderApp
             this.BeginInvoke(new Action(() => LoadPDF()));
         }
 
-        // ================= LOAD PARTS =================
+        // ================= PARTS =================
 
         private void LoadParts()
         {
             cmbPart.Items.Clear();
-            var parts = DatabaseHelper.GetParts();
-            foreach (var part in parts)
+            foreach (var part in DatabaseHelper.GetParts())
                 cmbPart.Items.Add(part);
             if (cmbPart.Items.Count > 0)
                 cmbPart.SelectedIndex = 0;
@@ -102,22 +103,15 @@ namespace BarcodeBartenderApp
             try
             {
                 if (webView21.CoreWebView2 == null) return;
-
-                string partName = cmbPart.Text;
-                string path = DatabaseHelper.GetPdfPath(partName);
-
+                string path = DatabaseHelper.GetPdfPath(cmbPart.Text);
                 if (string.IsNullOrEmpty(path))
                     path = DatabaseHelper.GetPdfPath();
-
                 if (!string.IsNullOrEmpty(path) && File.Exists(path))
-                {
-                    string uri = new Uri(path).AbsoluteUri;
-                    webView21.CoreWebView2.Navigate(uri + "?v=" + DateTime.Now.Ticks);
-                }
+                    webView21.CoreWebView2.Navigate(
+                        new Uri(path).AbsoluteUri + "?v=" + DateTime.Now.Ticks);
                 else
-                {
-                    webView21.NavigateToString("<h2 style='font-family:Segoe UI;color:gray;text-align:center;margin-top:50px'>No SOP Found</h2>");
-                }
+                    webView21.NavigateToString(
+                        "<h2 style='font-family:Segoe UI;color:gray;text-align:center;margin-top:60px'>No SOP Found</h2>");
             }
             catch (Exception ex)
             {
@@ -125,17 +119,27 @@ namespace BarcodeBartenderApp
             }
         }
 
-        // ================= SHIFT MAIL =================
+        // ================= PROGRESS =================
 
-        private void SendShiftReport()
+        private void UpdateProgress()
         {
-            string file = GetCsvPath();
-            if (File.Exists(file))
-                EmailHelper.SendEmailAsync(file,
-                    $"Shift Report - {currentShift} - {DateTime.Now:dd-MM-yyyy}");
+            if (shiftTarget > 0)
+            {
+                int pct = Math.Min((shiftCount * 100) / shiftTarget, 100);
+                progressShift.Value = pct;
+                lblProgress.Text = $"Shift: {shiftCount} / {shiftTarget} ({pct}%)";
+                progressShift.ForeColor = pct >= 100
+                    ? System.Drawing.Color.Green
+                    : System.Drawing.Color.FromArgb(0, 120, 215);
+            }
+            else
+            {
+                progressShift.Value = 0;
+                lblProgress.Text = $"Shift: {shiftCount} (No target set)";
+            }
         }
 
-        // ================= SCANNER =================
+        // ================= SCAN =================
 
         private void txtScan_KeyDown(object sender, KeyEventArgs e)
         {
@@ -147,35 +151,63 @@ namespace BarcodeBartenderApp
 
             if (string.IsNullOrEmpty(barcode)) return;
 
-            // 🔥 Duplicate check
+            bool isReprint = false;
+            string reprintReason = "";
+
             if (DatabaseHelper.IsDuplicate(barcode))
             {
                 var result = MessageBox.Show(
                     $"Barcode '{barcode}' already printed!\nDo you want to REPRINT?",
                     "Duplicate Detected",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning);
-
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (result != DialogResult.Yes) return;
+
+                reprintReason = Microsoft.VisualBasic.Interaction.InputBox(
+                    "Enter reprint reason:", "Reprint Reason");
+                if (string.IsNullOrWhiteSpace(reprintReason)) return;
+                isReprint = true;
             }
 
             currentShift = ShiftHelper.GetCurrentShift();
             lblShift.Text = "Shift: " + currentShift;
 
             PrintLabel(barcode);
-            SaveToCsv(barcode);
-            DatabaseHelper.SaveScanLog(barcode, cmbPart.Text, currentUser, currentShift);
+            SaveToCsv(barcode, isReprint, reprintReason);
+            DatabaseHelper.SaveScanLog(barcode, cmbPart.Text,
+                currentUser, currentShift, isReprint, reprintReason);
 
             totalCount++;
             todayCount++;
+            shiftCount++;
 
             lblTotal.Text = $"Total: {totalCount}";
             lblToday.Text = $"Today: {todayCount}";
-            lblStatus.Text = "✅ PRINTED";
-            lblStatus.ForeColor = System.Drawing.Color.Green;
+            UpdateProgress();
+
+            lblStatus.Text = isReprint ? "REPRINT" : "PRINTED";
+            lblStatus.ForeColor = isReprint
+                ? System.Drawing.Color.Orange
+                : System.Drawing.Color.Green;
 
             lstStatus.Items.Insert(0,
-                $"[{DateTime.Now:HH:mm:ss}] {barcode} | {cmbPart.Text} | {currentUser} | {currentShift}");
+                $"[{DateTime.Now:HH:mm:ss}] {barcode} | {cmbPart.Text} | {currentUser} | {currentShift}"
+                + (isReprint ? " | REPRINT" : ""));
+
+            PlayBeep(isReprint);
+        }
+
+        // ================= BEEP =================
+
+        private void PlayBeep(bool isReprint)
+        {
+            try
+            {
+                if (isReprint)
+                    SystemSounds.Exclamation.Play();
+                else
+                    SystemSounds.Beep.Play();
+            }
+            catch { }
         }
 
         // ================= CSV =================
@@ -186,22 +218,20 @@ namespace BarcodeBartenderApp
             return Path.Combine(baseFolder, fileName);
         }
 
-        private void SaveToCsv(string barcode)
+        private void SaveToCsv(string barcode, bool isReprint = false, string reason = "")
         {
             try
             {
                 string file = GetCsvPath();
-
                 if (!File.Exists(file))
-                    File.WriteAllText(file, "SrNo,DateTime,Barcode,Part,User,Shift\n");
-
+                    File.WriteAllText(file,
+                        "SrNo,DateTime,Barcode,Part,User,Shift,Reprint,Reason\n");
                 int sr = File.ReadAllLines(file).Length;
-
                 using (var sw = new StreamWriter(file, true))
-                {
                     sw.WriteLine(
-                        $"{sr},{DateTime.Now:yyyy-MM-dd HH:mm:ss},{barcode},{cmbPart.Text},{currentUser},{currentShift}");
-                }
+                        $"{sr},{DateTime.Now:yyyy-MM-dd HH:mm:ss},{barcode}," +
+                        $"{cmbPart.Text},{currentUser},{currentShift}," +
+                        $"{(isReprint ? "YES" : "NO")},{reason}");
             }
             catch (Exception ex)
             {
@@ -228,23 +258,32 @@ TEXT 45,31,""2"",0,1,1,""{serialNumber}""
 PRINT 1
 ";
                 File.WriteAllText(prnPath, prn);
-
-                var proc = Process.Start(new ProcessStartInfo
+                Process.Start(new ProcessStartInfo
                 {
                     FileName = "cmd.exe",
                     Arguments = $"/c copy /b \"{prnPath}\" \"\\\\localhost\\{printerShareName}\"",
                     UseShellExecute = false,
                     CreateNoWindow = true
                 });
-
                 serialNumber++;
                 DatabaseHelper.SaveSerial(serialNumber);
             }
             catch (Exception ex)
             {
                 MessageBox.Show("Print Error: " + ex.Message);
-                File.AppendAllText("error.log", $"[{DateTime.Now}] Print Error: {ex.Message}\n");
+                File.AppendAllText("error.log",
+                    $"[{DateTime.Now}] Print Error: {ex.Message}\n");
             }
+        }
+
+        // ================= SHIFT MAIL =================
+
+        private void SendShiftReport()
+        {
+            string file = GetCsvPath();
+            if (File.Exists(file))
+                EmailHelper.SendEmailAsync(file,
+                    $"Shift {currentShift} Report — {DateTime.Now:dd-MM-yyyy}");
         }
 
         // ================= BUTTONS =================
@@ -259,10 +298,10 @@ PRINT 1
             if (MessageBox.Show("Reset today's count?", "Confirm",
                 MessageBoxButtons.YesNo) == DialogResult.Yes)
             {
-                totalCount = 0;
-                todayCount = 0;
+                totalCount = 0; todayCount = 0; shiftCount = 0;
                 lblTotal.Text = "Total: 0";
                 lblToday.Text = "Today: 0";
+                UpdateProgress();
             }
         }
 
@@ -274,45 +313,40 @@ PRINT 1
         private void btnTestMail_Click(object sender, EventArgs e)
         {
             string file = GetCsvPath();
-            if (!File.Exists(file))
-            {
-                MessageBox.Show("No CSV found for today's shift ❌");
-                return;
-            }
+            if (!File.Exists(file)) { MessageBox.Show("No CSV yet!"); return; }
             EmailHelper.SendEmailAsync(file, "Test Report");
-            MessageBox.Show("Email sending in background ✅");
+            MessageBox.Show("Sending in background! ✅");
         }
 
         private void btnAdmin_Click(object sender, EventArgs e)
         {
             if (currentUser != "admin")
             {
-                MessageBox.Show("Only admin allowed ❌");
+                MessageBox.Show("Only admin allowed!", "Access Denied",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            AdminForm admin = new AdminForm();
+            var admin = new AdminForm();
             admin.ShowDialog();
             LoadParts();
             LoadPDF();
+            shiftTarget = DatabaseHelper.GetShiftTarget(currentShift);
+            UpdateProgress();
         }
 
         private void btnLogout_Click(object sender, EventArgs e)
         {
             if (MessageBox.Show("Are you sure you want to logout?", "Confirm Logout",
-                MessageBoxButtons.YesNo) == DialogResult.Yes)
+                MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
-                string file = GetCsvPath();
-                if (File.Exists(file))
-                    EmailHelper.SendEmailAsync(file,
-                        $"Logout Report - {currentUser} - {DateTime.Now:dd-MM-yyyy HH:mm}");
-
+                EmailHelper.SendEmailAsync(GetCsvPath(),
+                    $"Logout Report — {currentUser} — {DateTime.Now:dd-MM-yyyy HH:mm}");
                 timerClock.Stop();
-
                 LoginForm login = new LoginForm();
                 this.Hide();
                 if (login.ShowDialog() == DialogResult.OK)
                 {
-                    Form1 newForm = new Form1(login.LoggedUser);
+                    var newForm = new Form1(login.LoggedUser);
                     newForm.Show();
                 }
                 this.Close();
@@ -323,6 +357,7 @@ PRINT 1
         {
             LoadPDF();
         }
+
         private void btnZoomIn_Click(object sender, EventArgs e)
         {
             webView21.ZoomFactor = Math.Min(webView21.ZoomFactor + 0.1, 3.0);
@@ -331,6 +366,11 @@ PRINT 1
         private void btnZoomOut_Click(object sender, EventArgs e)
         {
             webView21.ZoomFactor = Math.Max(webView21.ZoomFactor - 0.1, 0.5);
+        }
+
+        private void splitContainer1_Panel1_Paint(object sender, PaintEventArgs e)
+        {
+
         }
     }
 }

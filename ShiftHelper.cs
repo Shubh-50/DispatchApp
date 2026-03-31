@@ -8,7 +8,6 @@ public static class ShiftHelper
         {
             var shifts = DatabaseHelper.GetShifts();
             TimeSpan now = DateTime.Now.TimeOfDay;
-
             foreach (var s in shifts)
             {
                 if (s.start < s.end)

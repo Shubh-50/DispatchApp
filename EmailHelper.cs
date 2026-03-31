@@ -3,7 +3,6 @@ using System.IO;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace BarcodeBartenderApp
 {
@@ -28,7 +27,7 @@ namespace BarcodeBartenderApp
                     mail.From = new MailAddress(sender);
                     mail.To.Add(receiver);
                     mail.Subject = subject;
-                    mail.Body = $"Please find attached shift report.\nGenerated: {DateTime.Now}";
+                    mail.Body = $"Shift report attached.\nGenerated: {DateTime.Now:dd-MM-yyyy HH:mm:ss}";
 
                     FileStream fs = new FileStream(
                         filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
@@ -42,7 +41,6 @@ namespace BarcodeBartenderApp
                 }
                 catch (Exception ex)
                 {
-                    // Log silently — don't block UI
                     File.AppendAllText("error.log",
                         $"[{DateTime.Now}] Email Error: {ex.Message}\n");
                 }
