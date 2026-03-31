@@ -1,0 +1,16 @@
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.exe
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.deps.json
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.runtimeconfig.json
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.dll
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.pdb
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\BarcodeBartenderApp.Form1.resources
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.csproj.GenerateResource.cache
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.AssemblyInfoInputs.cache
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.AssemblyInfo.cs
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.csproj.CoreCompileInputs.cache
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.dll
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\refint\PRN_TSC_LABLE_PRINTER.dll
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.pdb
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\PRN_TSC_LABLE_PRINTER.genruntimeconfig.cache
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Release\net8.0-windows\ref\PRN_TSC_LABLE_PRINTER.dll

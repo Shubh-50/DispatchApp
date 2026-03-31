@@ -1,0 +1,5 @@
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\publish\PRN_TSC_LABLE_PRINTER.exe
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\publish\PRN_TSC_LABLE_PRINTER.dll
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\publish\PRN_TSC_LABLE_PRINTER.deps.json
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\publish\PRN_TSC_LABLE_PRINTER.runtimeconfig.json
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\bin\publish\PRN_TSC_LABLE_PRINTER.pdb

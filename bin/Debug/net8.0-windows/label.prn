@@ -1,0 +1,9 @@
+
+SIZE 24 mm,8 mm
+GAP 1 mm,0 mm
+CLS
+QRCODE 5,5,L,3,A,0,"gdgdf"
+TEXT 45,5,"2",0,1,1,"gdgdf"
+TEXT 45,18,"2",0,1,1,"Part-A"
+TEXT 45,31,"2",0,1,1,"501"
+PRINT 1
