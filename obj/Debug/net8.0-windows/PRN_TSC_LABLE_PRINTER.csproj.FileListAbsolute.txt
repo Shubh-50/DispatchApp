@@ -32,3 +32,4 @@ C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRI
 C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Debug\net8.0-windows\PRN_TSC_LABLE_PRINTER.pdb
 C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Debug\net8.0-windows\PRN_TSC_LABLE_PRINTER.genruntimeconfig.cache
 C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Debug\net8.0-windows\ref\PRN_TSC_LABLE_PRINTER.dll
+C:\Users\MaintenanceDharwad\source\repos\PRN_TSC_LABLE_PRINTER\PRN_TSC_LABLE_PRINTER\obj\Debug\net8.0-windows\PRN_TSC_LABLE_PRINTER.sourcelink.json

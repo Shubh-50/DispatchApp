@@ -211,6 +211,46 @@ namespace BarcodeBartenderApp
             }
         }
 
+        // ================= VALIDATE USER =================
+        public static bool ValidateUser(string username, string password, out bool isFirstLogin)
+        {
+            isFirstLogin = false;
+            try
+            {
+                using (var con = new SQLiteConnection(connectionString))
+                {
+                    con.Open();
+                    var cmd = new SQLiteCommand(
+                        "SELECT Password, IsFirstLogin FROM Users WHERE Username=@u", con);
+                    cmd.Parameters.AddWithValue("@u", username);
+                    var reader = cmd.ExecuteReader();
+
+                    if (reader.Read())
+                    {
+                        string dbPass = reader["Password"]?.ToString() ?? "";
+                        isFirstLogin = Convert.ToInt32(reader["IsFirstLogin"]) == 1;
+                        return dbPass == password;
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        // ================= UPDATE PASSWORD =================
+        public static void UpdatePassword(string username, string newPassword)
+        {
+            using (var con = new SQLiteConnection(connectionString))
+            {
+                con.Open();
+                var cmd = new SQLiteCommand(
+                    "UPDATE Users SET Password=@p, IsFirstLogin=0 WHERE Username=@u", con);
+                cmd.Parameters.AddWithValue("@p", newPassword);
+                cmd.Parameters.AddWithValue("@u", username);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
         // ================= PDF =================
 
         public static string GetPdfPath()
