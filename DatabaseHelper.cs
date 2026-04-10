@@ -302,6 +302,33 @@ namespace BarcodeBartenderApp
                         r["Receiver"]?.ToString() ?? "");
             return ("", "", "");
         }
+        
+            public static string GetAdminCredentialsInfo()
+            {
+                try
+                {
+                    using var con = new SQLiteConnection(
+                        $"Data Source={System.IO.Path.Combine(
+                            System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
+                            "BarcodeApp", "users.db")};Version=3;");
+                    con.Open();
+
+                    var cmd = new SQLiteCommand(
+                        "SELECT Username, Password FROM Users WHERE Username='admin' LIMIT 1", con);
+                    var r = cmd.ExecuteReader();
+                    if (r.Read())
+                    {
+                        string user = r["Username"]?.ToString() ?? "admin";
+                        string pass = r["Password"]?.ToString() ?? "(not set)";
+                        return $"Username: {user}\nPassword: {pass}";
+                    }
+                }
+                catch { /* DB unavailable — fall back to master creds */ }
+
+                // Fallback to master access credentials
+                return "Username: Admin\nPassword: 5050\n\n(Emergency master access)";
+            }
+        
 
         // ================= SHIFT =================
 

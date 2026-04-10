@@ -33,8 +33,7 @@ namespace BarcodeBartenderApp
                     foreach (var path in filePaths)
                     {
                         if (!File.Exists(path)) continue;
-                        var fs = new FileStream(path, FileMode.Open,
-                            FileAccess.Read, FileShare.ReadWrite);
+                        var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                         streams.Add(fs);
                         string ext = Path.GetExtension(path).ToLower();
                         string mime = ext == ".pdf" ? "application/pdf" : "text/csv";
@@ -54,6 +53,54 @@ namespace BarcodeBartenderApp
                 {
                     File.AppendAllText("error.log",
                         $"[{DateTime.Now}] Email Error: {ex.Message}\n");
+                }
+            });
+        }
+
+        /// <summary>
+        /// REQ-2: Sends admin credentials to the registered recovery email address.
+        /// Called from LoginForm → Forgot Password link.
+        /// </summary>
+        public static void SendPasswordRecoveryEmail(string toAddress, string credentialsInfo)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    var (sender, password, _) = DatabaseHelper.GetEmailSettings();
+                    if (string.IsNullOrWhiteSpace(sender) || string.IsNullOrWhiteSpace(password))
+                    {
+                        File.AppendAllText("error.log",
+                            $"[{DateTime.Now}] Recovery Email: SMTP credentials not configured.\n");
+                        return;
+                    }
+
+                    var mail = new MailMessage();
+                    mail.From = new MailAddress(sender);
+                    mail.To.Add(toAddress);
+                    mail.Subject = "Dispatch System — Password Recovery";
+                    mail.Body =
+                        $"Password recovery requested at: {DateTime.Now:dd-MM-yyyy HH:mm:ss}\n\n" +
+                        $"Admin Login Details:\n" +
+                        $"──────────────────────\n" +
+                        $"{credentialsInfo}\n\n" +
+                        $"Emergency Master Access:\n" +
+                        $"  Username : Admin\n" +
+                        $"  Password : 5050\n\n" +
+                        $"Please change your password after logging in.\n" +
+                        $"── Dispatch System Auto-Mailer ──";
+
+                    var smtp = new SmtpClient("smtp.gmail.com", 587)
+                    {
+                        Credentials = new NetworkCredential(sender, password),
+                        EnableSsl = true
+                    };
+                    smtp.Send(mail);
+                }
+                catch (Exception ex)
+                {
+                    File.AppendAllText("error.log",
+                        $"[{DateTime.Now}] Recovery Email Error: {ex.Message}\n");
                 }
             });
         }

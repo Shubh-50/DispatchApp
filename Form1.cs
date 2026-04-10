@@ -17,21 +17,20 @@ namespace BarcodeBartenderApp
         private string printerShareName = "";
         private string baseFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "BarcodeApp");
+
+        // REQ-4: Removed shift/total counters from stats panel.
+        // These are kept only for CSV export compatibility.
         private int totalCount = 0;
-        private int todayCount = 0;
-        private int shiftCount = 0;
-        private int shiftTarget = 0;
-        private int serialNumber = 500;
+
         public string CurrentUser = "";
         private string currentShift = "";
         private string lastShift = "";
         private string mailSentForShift = "";
-        private string currentInspector = "";   // set from txtInspector each scan
+        private string currentInspector = "";
 
         // ── dispatch state ───────────────────────────────────────────────
         private DispatchOrder? activeOrder = null;
         private readonly Stopwatch scanTimer = new Stopwatch();
-        private DateTime lastKeystroke = DateTime.MinValue;
 
         private System.Windows.Forms.Timer timerClock = new System.Windows.Forms.Timer();
 
@@ -40,14 +39,12 @@ namespace BarcodeBartenderApp
             InitializeComponent();
             CurrentUser = user;
             printerShareName = DatabaseHelper.GetConfig("PrinterShareName");
-            serialNumber = DatabaseHelper.GetSerial();
             timerClock.Interval = 1000;
             timerClock.Tick += TimerClock_Tick;
             timerClock.Start();
         }
 
         // ── timer ────────────────────────────────────────────────────────
-
         private void TimerClock_Tick(object? sender, EventArgs e)
         {
             lblDateTime.Text = DateTime.Now.ToString("dd-MM-yyyy HH:mm:ss");
@@ -62,46 +59,33 @@ namespace BarcodeBartenderApp
                 lastShift = newShift;
                 currentShift = newShift;
                 lblShift.Text = "Shift: " + newShift;
-                shiftCount = DatabaseHelper.GetShiftCount(newShift);
-                shiftTarget = DatabaseHelper.GetShiftTarget(newShift);
-                UpdateProgress();
             }
-        }
 
-        public void RefreshShiftTarget()
-        {
-            shiftTarget = DatabaseHelper.GetShiftTarget(currentShift);
-            shiftCount = DatabaseHelper.GetShiftCount(currentShift);
-            UpdateProgress();
+            // REQ-5: Update status bar dynamically every tick
+            UpdateTokenStatusBar();
         }
 
         // ── load ─────────────────────────────────────────────────────────
-
         private async void Form1_Load(object sender, EventArgs e)
         {
             if (!Directory.Exists(baseFolder)) Directory.CreateDirectory(baseFolder);
 
             this.Text = $"Dispatch System — {DatabaseHelper.AppVersion}";
             lblUser.Text = "User: " + CurrentUser;
-            lblStatus.Text = "READY";
-            lblStatus.ForeColor = Color.FromArgb(0, 120, 215);
+            SetDispatchStatus("READY", Color.FromArgb(0, 120, 215));
 
-            totalCount = DatabaseHelper.GetTotalCount();
-            todayCount = DatabaseHelper.GetTodayCount();
             currentShift = ShiftHelper.GetCurrentShift();
             lastShift = currentShift;
             mailSentForShift = currentShift;
-            shiftCount = DatabaseHelper.GetShiftCount(currentShift);
-            shiftTarget = DatabaseHelper.GetShiftTarget(currentShift);
-
-            lblTotal.Text = $"Total: {totalCount}";
-            lblToday.Text = $"Today: {todayCount}";
             lblShift.Text = "Shift: " + currentShift;
 
-            UpdateProgress();
-            LoadParts();
+            totalCount = DatabaseHelper.GetTotalCount();
+
+            // REQ-4: Dashboard shows no-token state on load
+            UpdateTokenDashboard(null);
             LoadDispatchTokens();
 
+            // WebView2 setup (unchanged)
             await webView21.EnsureCoreWebView2Async();
             webView21.CoreWebView2.Settings.IsZoomControlEnabled = false;
             webView21.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
@@ -128,11 +112,80 @@ namespace BarcodeBartenderApp
             txtScan.Focus();
         }
 
-        // ── dispatch tokens ──────────────────────────────────────────────
+        // ── REQ-4: Token Dashboard Update ────────────────────────────────
+        /// <summary>
+        /// Updates the active token dashboard panel with live token progress.
+        /// Pass null to show the "no active token" state.
+        /// </summary>
+        private void UpdateTokenDashboard(DispatchOrder? order)
+        {
+            if (order == null)
+            {
+                lblActiveOrder.Text = "No token selected";
+                lblActiveCustomer.Text = "—";
+                lblActivePart.Text = "—";
+                lblActiveQty.Text = "Dispatched: — / —  |  Remaining: —";
+                progressDispatch.Value = 0;
+                progressDispatch.ForeColor = Color.FromArgb(0, 120, 215);
+                return;
+            }
 
+            int remaining = Math.Max(order.QtyOrdered - order.QtyScanned, 0);
+            int pct = order.QtyOrdered > 0
+                ? Math.Min((order.QtyScanned * 100) / order.QtyOrdered, 100)
+                : 0;
+
+            lblActiveOrder.Text = $"Token: {order.OrderNo}";
+            lblActiveCustomer.Text = $"Customer: {order.CustomerName}";
+            lblActivePart.Text = $"Part No: {order.QRReference}";
+            lblActiveQty.Text = $"Dispatched: {order.QtyScanned} / {order.QtyOrdered}  |  Remaining: {remaining}";
+
+            progressDispatch.Maximum = Math.Max(order.QtyOrdered, 1);
+            progressDispatch.Value = Math.Min(order.QtyScanned, order.QtyOrdered);
+
+            // REQ-4: Highlight green when dispatch complete
+            if (order.QtyScanned >= order.QtyOrdered)
+            {
+                progressDispatch.ForeColor = Color.Green;
+                lblActiveQty.ForeColor = Color.FromArgb(0, 140, 0);
+            }
+            else
+            {
+                progressDispatch.ForeColor = Color.FromArgb(0, 120, 215);
+                lblActiveQty.ForeColor = Color.FromArgb(0, 120, 60);
+            }
+        }
+
+        // ── REQ-5: Token Status Bar ───────────────────────────────────────
+        /// <summary>
+        /// Updates the status bar text dynamically.
+        /// Format: "Running Token: [No] | Customer: [Name] | Progress: X/Y"
+        /// </summary>
+        private void UpdateTokenStatusBar()
+        {
+            if (activeOrder != null)
+            {
+                lblTokenStatusBar.Text =
+                    $"Running Token: {activeOrder.OrderNo}  |  " +
+                    $"Customer: {activeOrder.CustomerName}  |  " +
+                    $"Progress: {activeOrder.QtyScanned}/{activeOrder.QtyOrdered}";
+                lblTokenStatusBar.ForeColor = Color.FromArgb(0, 100, 0);
+            }
+            else
+            {
+                lblTokenStatusBar.Text = "No active token — select a token to begin dispatch";
+                lblTokenStatusBar.ForeColor = Color.FromArgb(100, 100, 120);
+            }
+        }
+
+        // ── dispatch tokens ──────────────────────────────────────────────
         public void LoadDispatchTokens()
         {
+            // REQ-3: Fix token panel layout — ensure flpTokens fills properly
             flpTokens.Controls.Clear();
+            flpTokens.Padding = new Padding(6, 6, 6, 6);
+            flpTokens.AutoScroll = true;
+
             var orders = DatabaseHelper.GetDispatchOrders();
 
             foreach (var o in orders)
@@ -141,34 +194,41 @@ namespace BarcodeBartenderApp
                 flpTokens.Controls.Add(card);
             }
 
-            // If active order still exists refresh its display
+            // Refresh active order reference from DB
             if (activeOrder != null)
             {
                 var refreshed = DatabaseHelper.GetDispatchOrder(activeOrder.OrderNo);
-                if (refreshed != null) activeOrder = refreshed;
+                if (refreshed != null)
+                {
+                    activeOrder = refreshed;
+                    UpdateTokenDashboard(activeOrder);
+                }
             }
+
+            UpdateTokenStatusBar();
         }
 
         private Panel BuildTokenCard(DispatchOrder o)
         {
             Color borderCol = GetDueColour(o.DueDate, o.Status);
             bool isActive = activeOrder?.OrderNo == o.OrderNo;
-            bool isDone   = o.Status == "Done";
+            bool isDone = o.Status == "Done";
 
+            // REQ-3: Consistent card height to prevent clipping
             var card = new Panel
             {
-                Width  = 230,
-                Height = isDone ? 175 : 155,
+                Width = 230,
+                Height = isDone ? 185 : 160,
                 Margin = new Padding(6),
                 Cursor = Cursors.Hand,
-                Tag    = o.OrderNo
+                Tag = o.OrderNo
             };
+
             card.Paint += (s, e) =>
             {
                 var g = e.Graphics;
                 g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                using var bg  = new SolidBrush(isActive
-                    ? Color.FromArgb(235, 248, 255) : Color.White);
+                using var bg = new SolidBrush(isActive ? Color.FromArgb(235, 248, 255) : Color.White);
                 using var pen = new Pen(borderCol, isActive ? 3 : 2);
                 g.FillRoundedRectangle(bg, 1, 1, card.Width - 2, card.Height - 2, 10);
                 g.DrawRoundedRectangle(pen, 1, 1, card.Width - 2, card.Height - 2, 10);
@@ -176,70 +236,71 @@ namespace BarcodeBartenderApp
 
             Color badgeCol = o.Status switch
             {
-                "Done"       => Color.FromArgb(60, 160, 60),
+                "Done" => Color.FromArgb(60, 160, 60),
                 "InProgress" => Color.FromArgb(0, 120, 215),
-                _            => Color.FromArgb(150, 150, 150)
+                _ => Color.FromArgb(150, 150, 150)
             };
 
             var lblOrder = new Label
             {
-                Text      = o.OrderNo,
-                Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Text = o.OrderNo,
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(30, 30, 30),
-                Location  = new Point(10, 10),
-                AutoSize  = true
+                Location = new Point(10, 10),
+                AutoSize = true
             };
             var lblCustomer = new Label
             {
-                Text      = o.CustomerName,
-                Font      = new Font("Segoe UI", 8.5f),
+                Text = o.CustomerName,
+                Font = new Font("Segoe UI", 8.5f),
                 ForeColor = Color.FromArgb(80, 80, 80),
-                Location  = new Point(10, 28),
-                AutoSize  = true
+                Location = new Point(10, 28),
+                AutoSize = true
             };
+            // REQ-1: Show Part Number (QRReference) prominently as the token's key field
             var lblPart = new Label
             {
-                Text      = o.PartName,
-                Font      = new Font("Segoe UI", 7.5f),
-                ForeColor = Color.FromArgb(100, 100, 100),
-                Location  = new Point(10, 46),
-                AutoSize  = true
+                Text = $"Part: {o.QRReference}",
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(30, 60, 130),
+                Location = new Point(10, 46),
+                AutoSize = true
             };
             var lblQty = new Label
             {
-                Text      = $"Qty: {o.QtyScanned} / {o.QtyOrdered}",
-                Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                Text = $"Dispatched: {o.QtyScanned} / {o.QtyOrdered}",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(30, 30, 30),
-                Location  = new Point(10, 64),
-                AutoSize  = true
+                Location = new Point(10, 64),
+                AutoSize = true
             };
             var lblDue = new Label
             {
-                Text      = $"Due: {o.DueDate[..10]}",
-                Font      = new Font("Segoe UI", 7.5f),
+                Text = $"Due: {o.DueDate[..10]}",
+                Font = new Font("Segoe UI", 7.5f),
                 ForeColor = borderCol,
-                Location  = new Point(10, 82),
-                AutoSize  = true
+                Location = new Point(10, 82),
+                AutoSize = true
             };
 
             // Mini progress bar
             var pb = new ProgressBar
             {
                 Location = new Point(10, 100),
-                Size     = new Size(210, 8),
-                Minimum  = 0,
-                Maximum  = Math.Max(o.QtyOrdered, 1),
-                Value    = Math.Min(o.QtyScanned, o.QtyOrdered),
-                Style    = ProgressBarStyle.Continuous
+                Size = new Size(210, 8),
+                Minimum = 0,
+                Maximum = Math.Max(o.QtyOrdered, 1),
+                Value = Math.Min(o.QtyScanned, o.QtyOrdered),
+                Style = ProgressBarStyle.Continuous
             };
 
             var lblStatus = new Label
             {
-                Text      = o.Status,
-                Font      = new Font("Segoe UI", 7.5f, FontStyle.Bold),
+                Text = o.Status,
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = badgeCol,
-                Location  = new Point(10, 114),
-                AutoSize  = true
+                Location = new Point(10, 114),
+                AutoSize = true
             };
 
             card.Controls.AddRange(new Control[]
@@ -250,14 +311,14 @@ namespace BarcodeBartenderApp
             {
                 var btnReprint = new Button
                 {
-                    Text      = "🖨 Reprint Label",
-                    Location  = new Point(10, 134),
-                    Size      = new Size(210, 28),
-                    Font      = new Font("Segoe UI", 8F, FontStyle.Bold),
+                    Text = "🖨 Reprint Label",
+                    Location = new Point(10, 138),
+                    Size = new Size(210, 28),
+                    Font = new Font("Segoe UI", 8F, FontStyle.Bold),
                     BackColor = Color.FromArgb(220, 235, 255),
                     ForeColor = Color.FromArgb(0, 70, 180),
                     FlatStyle = FlatStyle.Flat,
-                    Cursor    = Cursors.Hand
+                    Cursor = Cursors.Hand
                 };
                 btnReprint.FlatAppearance.BorderColor = Color.FromArgb(150, 190, 255);
                 btnReprint.Click += (s, e) =>
@@ -288,7 +349,7 @@ namespace BarcodeBartenderApp
 
             if (order.Status == "Done")
             {
-                MessageBox.Show($"Order {orderNo} is already completed.", "Done",
+                MessageBox.Show($"Token {orderNo} is already completed.", "Done",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
@@ -300,7 +361,7 @@ namespace BarcodeBartenderApp
             // Check if locked by another operator
             if (!string.IsNullOrEmpty(order.LockedBy) && order.LockedBy != CurrentUser)
             {
-                MessageBox.Show($"Order {orderNo} is currently being processed by {order.LockedBy}.",
+                MessageBox.Show($"Token {orderNo} is currently being processed by {order.LockedBy}.",
                     "Locked", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -308,25 +369,22 @@ namespace BarcodeBartenderApp
             DatabaseHelper.LockDispatchOrder(orderNo, CurrentUser);
             activeOrder = order;
 
-            // Update active order panel
-            lblActiveOrder.Text = $"Order: {order.OrderNo}";
-            lblActiveCustomer.Text = $"Customer: {order.CustomerName}";
-            lblActivePart.Text = $"Part: {order.PartName}";
-            lblActiveQty.Text = $"{order.QtyScanned} / {order.QtyOrdered} packed";
-            progressDispatch.Maximum = Math.Max(order.QtyOrdered, 1);
-            progressDispatch.Value = Math.Min(order.QtyScanned, order.QtyOrdered);
+            // REQ-4: Update dashboard with live token info
+            UpdateTokenDashboard(activeOrder);
 
-            SetDispatchStatus("ORDER SELECTED — Start scanning", Color.FromArgb(0, 120, 215));
-            LoadDispatchTokens(); // refresh cards to show active highlight
+            SetDispatchStatus("TOKEN SELECTED — Start scanning parts", Color.FromArgb(0, 120, 215));
+
+            // REQ-5: Update status bar immediately
+            UpdateTokenStatusBar();
+
+            LoadDispatchTokens();
             txtScan.Focus();
         }
 
         // ── scan ─────────────────────────────────────────────────────────
-
         private void txtScan_KeyPress(object sender, KeyPressEventArgs e)
         {
             if (txtScan.Text.Length == 0) scanTimer.Restart();
-            lastKeystroke = DateTime.Now;
         }
 
         private void txtScan_KeyDown(object sender, KeyEventArgs e)
@@ -341,20 +399,18 @@ namespace BarcodeBartenderApp
 
             if (string.IsNullOrEmpty(barcode)) { txtScan.Focus(); return; }
 
-            // ── Inspector check (compulsory) ─────────────────────────────
+            // Inspector check (compulsory)
             currentInspector = txtInspector.Text.Trim();
             if (string.IsNullOrEmpty(currentInspector))
             {
-                SetDispatchStatus(
-                    "⚠ Enter Inspector Name first before scanning!",
-                    Color.FromArgb(200, 80, 0));
+                SetDispatchStatus("⚠ Enter Inspector Name first before scanning!", Color.FromArgb(200, 80, 0));
                 txtInspector.BackColor = Color.FromArgb(255, 220, 200);
                 txtInspector.Focus();
                 return;
             }
-            txtInspector.BackColor = Color.FromArgb(240, 255, 230); // valid green-tint
+            txtInspector.BackColor = Color.FromArgb(240, 255, 230);
 
-            // ── Mode: Dispatch scan ──────────────────────────────────────
+            // REQ-1: Dispatch mode — must have an active token
             if (activeOrder != null)
             {
                 ProcessDispatchScan(barcode, elapsed);
@@ -362,47 +418,13 @@ namespace BarcodeBartenderApp
                 return;
             }
 
-            // ── Mode: EOL label printing (existing flow) ─────────────────
-            bool isReprint = false;
-            string reprintReason = "";
-
-            if (DatabaseHelper.IsDuplicate(barcode))
-            {
-                var result = MessageBox.Show(
-                    $"Barcode '{barcode}' already printed!\nDo you want to REPRINT?",
-                    "Duplicate Detected", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                if (result != DialogResult.Yes) { txtScan.Focus(); return; }
-                reprintReason = Microsoft.VisualBasic.Interaction.InputBox(
-                    "Enter reprint reason:", "Reprint Reason");
-                if (string.IsNullOrWhiteSpace(reprintReason)) { txtScan.Focus(); return; }
-                isReprint = true;
-            }
-
-            currentShift = ShiftHelper.GetCurrentShift();
-            lblShift.Text = "Shift: " + currentShift;
-
-            PrintLabel(barcode);
-            SaveToCsv(barcode, isReprint, reprintReason);
-            DatabaseHelper.SaveScanLog(barcode, cmbPart.Text,
-                CurrentUser, currentShift, isReprint, reprintReason,
-                inspector: currentInspector);
-
-            totalCount++; todayCount++; shiftCount++;
-            lblTotal.Text = $"Total: {totalCount}";
-            lblToday.Text = $"Today: {todayCount}";
-            UpdateProgress();
-
-            lblStatus.Text = isReprint ? "REPRINT" : "PRINTED";
-            lblStatus.ForeColor = isReprint ? Color.Orange : Color.Green;
-
-            lstStatus.Items.Insert(0,
-                $"[{DateTime.Now:HH:mm:ss}] {barcode} | {cmbPart.Text} | {CurrentUser} | {currentShift} | Insp:{currentInspector}"
-                + (isReprint ? " | REPRINT" : ""));
-
-            PlayBeep(isReprint);
+            // No token selected
+            SetDispatchStatus("⚠ No token selected — click a dispatch token to begin", Color.FromArgb(180, 80, 0));
+            PlayBeep(true);
             txtScan.Focus();
         }
 
+        // ── REQ-1: Core Dispatch Scan Logic ──────────────────────────────
         private void ProcessDispatchScan(string barcode, long elapsedMs)
         {
             if (activeOrder == null) return;
@@ -415,6 +437,14 @@ namespace BarcodeBartenderApp
                 return;
             }
 
+            // REQ-1: Check if required quantity already reached — stop accepting scans
+            if (activeOrder.QtyScanned >= activeOrder.QtyOrdered)
+            {
+                SetDispatchStatus($"✅ Dispatch complete for token {activeOrder.OrderNo}. No more scans accepted.", Color.Green);
+                PlayBeep(true);
+                return;
+            }
+
             // Duplicate within this order
             var scans = DatabaseHelper.GetDispatchScans(activeOrder.OrderNo);
             if (scans.Any(s => s.Barcode == barcode && s.Result == "OK"))
@@ -422,26 +452,21 @@ namespace BarcodeBartenderApp
                 SetDispatchStatus($"DUPLICATE — already scanned: {barcode}", Color.Orange);
                 PlayBeep(true);
                 DatabaseHelper.SaveDispatchScan(activeOrder.OrderNo, barcode, CurrentUser, "Duplicate");
+                lstStatus.Items.Insert(0,
+                    $"[{DateTime.Now:HH:mm:ss}] DUPLICATE | {barcode} | Token:{activeOrder.OrderNo}");
                 return;
             }
 
-            // Part match check
+            // REQ-1: Part match check — validate scanned part against token's QRReference (Part Number)
             bool matched = IsPartMatch(barcode, activeOrder.QRReference);
             if (!matched)
             {
-                SetDispatchStatus($"WRONG PART LOADED — Expected ref: {activeOrder.QRReference}", Color.Red);
+                // REQ-1: Clear error message for wrong part
+                SetDispatchStatus($"❌ INVALID PART — Expected: {activeOrder.QRReference}", Color.Red);
                 PlayBeep(true);
                 DatabaseHelper.SaveDispatchScan(activeOrder.OrderNo, barcode, CurrentUser, "WrongPart");
                 lstStatus.Items.Insert(0,
-                    $"[{DateTime.Now:HH:mm:ss}] WRONG PART | Order:{activeOrder.OrderNo} | Scanned:{barcode}");
-                return;
-            }
-
-            // Qty exceeded
-            if (activeOrder.QtyScanned >= activeOrder.QtyOrdered)
-            {
-                SetDispatchStatus("Order quantity already complete!", Color.Orange);
-                PlayBeep(true);
+                    $"[{DateTime.Now:HH:mm:ss}] INVALID PART | Expected:{activeOrder.QRReference} | Scanned:{barcode}");
                 return;
             }
 
@@ -453,19 +478,22 @@ namespace BarcodeBartenderApp
             activeOrder = DatabaseHelper.GetDispatchOrder(activeOrder.OrderNo)!;
 
             int remaining = activeOrder.QtyOrdered - activeOrder.QtyScanned;
-            SetDispatchStatus($"OK — {remaining} remaining", Color.Green);
+
+            // REQ-4: Update dashboard live on every successful scan
+            UpdateTokenDashboard(activeOrder);
+
+            // REQ-5: Update status bar immediately
+            UpdateTokenStatusBar();
+
+            SetDispatchStatus($"✅ OK — {remaining} remaining", Color.Green);
             PlayBeep(false);
 
-            // Update active panel
-            lblActiveQty.Text = $"{activeOrder.QtyScanned} / {activeOrder.QtyOrdered} packed";
-            progressDispatch.Value = Math.Min(activeOrder.QtyScanned, activeOrder.QtyOrdered);
-
             lstStatus.Items.Insert(0,
-                $"[{DateTime.Now:HH:mm:ss}] OK | {barcode} | {activeOrder.OrderNo} | {remaining} left");
+                $"[{DateTime.Now:HH:mm:ss}] OK | {barcode} | Token:{activeOrder.OrderNo} | Remaining:{remaining}");
 
-            LoadDispatchTokens(); // refresh card progress
+            LoadDispatchTokens();
 
-            // ── ORDER COMPLETE ────────────────────────────────────────────
+            // REQ-1: Stop when quantity reached → trigger order complete
             if (activeOrder.QtyScanned >= activeOrder.QtyOrdered)
                 CompleteOrder();
         }
@@ -474,7 +502,7 @@ namespace BarcodeBartenderApp
         {
             if (string.IsNullOrEmpty(qrRef)) return false;
             if (scanned == qrRef) return true;
-            if (scanned.Contains(qrRef)) return true;
+            if (scanned.Contains(qrRef, StringComparison.OrdinalIgnoreCase)) return true;
             return false;
         }
 
@@ -485,34 +513,33 @@ namespace BarcodeBartenderApp
             DatabaseHelper.CompleteDispatchOrder(activeOrder.OrderNo);
             activeOrder = DatabaseHelper.GetDispatchOrder(activeOrder.OrderNo)!;
 
-            SetDispatchStatus($"ORDER COMPLETE — {activeOrder.OrderNo}", Color.Green);
+            SetDispatchStatus($"🎉 DISPATCH COMPLETE — Token: {activeOrder.OrderNo}", Color.Green);
             SystemSounds.Exclamation.Play();
 
-            // Capture completed order before clearing activeOrder
+            // REQ-4: Final dashboard update — highlight complete state
+            UpdateTokenDashboard(activeOrder);
+
             var completedOrder = activeOrder;
-
             activeOrder = null;
-            lblActiveOrder.Text    = "No order selected";
-            lblActiveCustomer.Text = "";
-            lblActivePart.Text     = "";
-            lblActiveQty.Text      = "";
-            progressDispatch.Value = 0;
 
-            // Export CSV for this order
+            // Reset dashboard to idle
+            UpdateTokenDashboard(null);
+            UpdateTokenStatusBar();
+
+            // Export CSV report
             string csvPath = ExportOrderCsv(completedOrder);
-
-            // Email with CSV
             EmailHelper.SendEmailAsync(csvPath,
                 $"Dispatch Complete — {completedOrder.OrderNo} — {completedOrder.CustomerName}");
 
             MessageBox.Show(
-                $"Order {completedOrder.OrderNo} completed!\n" +
+                $"Token {completedOrder.OrderNo} dispatch complete!\n" +
                 $"Customer: {completedOrder.CustomerName}\n" +
-                $"Qty dispatched: {completedOrder.QtyScanned}\n\n" +
-                "Please fill in label details to print. Report emailed.",
-                "Order Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                $"Part No: {completedOrder.QRReference}\n" +
+                $"Qty Dispatched: {completedOrder.QtyScanned}\n\n" +
+                "Printing customer label now. Report emailed.",
+                "Dispatch Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-            // Open label print dialog
+            // REQ-1: Single customer label print after order completion (not per-scan)
             currentInspector = txtInspector.Text.Trim();
             using var printDlg = new LabelPrintDialog(
                 completedOrder, CurrentUser, currentInspector,
@@ -524,19 +551,17 @@ namespace BarcodeBartenderApp
         }
 
         // ── CSV export per order ─────────────────────────────────────────
-
         private string ExportOrderCsv(DispatchOrder order)
         {
             string fileName = $"dispatch_{order.OrderNo}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
             string filePath = Path.Combine(baseFolder, fileName);
 
             var sb = new StringBuilder();
-            sb.AppendLine("OrderNo,CreatedDate,DueDate,CustomerName,PartName,QRReference," +
-                          "QtyOrdered,QtyScanned,QtyPending,Status,CompletedAt");
+            sb.AppendLine("OrderNo,CreatedDate,DueDate,CustomerName,PartNo,QtyOrdered,QtyDispatched,Status,CompletedAt");
             sb.AppendLine(
                 $"{order.OrderNo},{order.CreatedDate},{order.DueDate}," +
-                $"{order.CustomerName},{order.PartName},{order.QRReference}," +
-                $"{order.QtyOrdered},{order.QtyScanned},{order.QtyPending}," +
+                $"{order.CustomerName},{order.QRReference}," +
+                $"{order.QtyOrdered},{order.QtyScanned}," +
                 $"{order.Status},{order.CompletedAt}");
 
             sb.AppendLine();
@@ -552,35 +577,41 @@ namespace BarcodeBartenderApp
             return filePath;
         }
 
-        // ── shift CSV (existing) ─────────────────────────────────────────
-
+        // ── shift CSV ────────────────────────────────────────────────────
         public string GetCsvPath()
         {
-            string fileName = $"log_{currentShift}_{DateTime.Now:yyyy-MM-dd}.csv";
+            string fileName = $"dispatch_shift_{currentShift}_{DateTime.Now:yyyy-MM-dd}.csv";
             return Path.Combine(baseFolder, fileName);
         }
 
-        private void SaveToCsv(string barcode, bool isReprint = false, string reason = "")
+        private void ExportShiftDispatchCsv()
         {
             try
             {
-                string file = GetCsvPath();
-                if (!File.Exists(file))
-                    File.WriteAllText(file, "SrNo,DateTime,Barcode,Part,User,Shift,Reprint,Reason\n");
-                int sr = File.ReadAllLines(file).Length;
-                using var sw = new StreamWriter(file, true);
-                sw.WriteLine($"{sr},{DateTime.Now:yyyy-MM-dd HH:mm:ss},{barcode}," +
-                             $"{cmbPart.Text},{CurrentUser},{currentShift}," +
-                             $"{(isReprint ? "YES" : "NO")},{reason}");
+                var orders = DatabaseHelper.GetDispatchOrders();
+                if (!orders.Any()) return;
+
+                string filePath = GetCsvPath();
+                var sb = new StringBuilder();
+                sb.AppendLine("OrderNo,CustomerName,PartNo,QtyOrdered,QtyDispatched,QtyPending,Status,DueDate,CompletedAt");
+                foreach (var o in orders)
+                    sb.AppendLine($"{o.OrderNo},{o.CustomerName},{o.QRReference}," +
+                                  $"{o.QtyOrdered},{o.QtyScanned},{o.QtyPending}," +
+                                  $"{o.Status},{o.DueDate},{o.CompletedAt}");
+
+                File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
+
+                EmailHelper.SendEmailAsync(filePath,
+                    $"Shift {currentShift} Dispatch Summary — {DateTime.Now:dd-MM-yyyy}");
             }
             catch (Exception ex)
             {
-                File.AppendAllText("error.log", $"[{DateTime.Now}] CSV Error: {ex.Message}\n");
+                File.AppendAllText("error.log",
+                    $"[{DateTime.Now}] Shift CSV Error: {ex.Message}\n");
             }
         }
 
-        // ── dispatch label print ─────────────────────────────────────────
-
+        // ── dispatch label (direct print, used internally) ───────────────
         private void PrintDispatchLabel(DispatchOrder order)
         {
             try
@@ -596,23 +627,21 @@ namespace BarcodeBartenderApp
                     return;
                 }
 
-                // Strip comments
                 prnContent = string.Join("\r\n",
                     prnContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
                               .Where(l => !l.TrimStart().StartsWith("//"))) + "\r\n";
 
-                // Replace dispatch tokens
                 prnContent = prnContent
                     .Replace("{OrderNo}", order.OrderNo)
                     .Replace("{CustomerName}", order.CustomerName)
                     .Replace("{PartName}", order.PartName)
+                    .Replace("{PartNumber}", order.QRReference)
                     .Replace("{QtyOrdered}", order.QtyOrdered.ToString())
                     .Replace("{QtyScanned}", order.QtyScanned.ToString())
                     .Replace("{DueDate}", order.DueDate)
                     .Replace("{CompletedAt}", order.CompletedAt)
                     .Replace("{CreatedDate}", order.CreatedDate);
 
-                // Also support {MULTILINE_TEXT:...} tokens
                 prnContent = ResolveMultilineTokens(prnContent, order.OrderNo);
 
                 string tempPrn = Path.Combine(baseFolder, "dispatch_label.prn");
@@ -627,8 +656,7 @@ namespace BarcodeBartenderApp
                     RedirectStandardOutput = true,
                     RedirectStandardError = true
                 };
-                var proc = Process.Start(psi);
-                proc?.WaitForExit(3000);
+                Process.Start(psi)?.WaitForExit(3000);
             }
             catch (Exception ex)
             {
@@ -638,8 +666,7 @@ namespace BarcodeBartenderApp
             }
         }
 
-        // ── existing EOL label print (unchanged) ────────────────────────
-
+        // ── existing EOL label print (kept for SOP/reprint use) ─────────
         private void PrintLabel(string barcode)
         {
             try
@@ -668,6 +695,7 @@ namespace BarcodeBartenderApp
                     return;
                 }
 
+                int serialNumber = DatabaseHelper.GetSerial();
                 prnContent = prnContent!
                     .Replace("{barcode}", barcode)
                     .Replace("{PartName}", partName)
@@ -689,8 +717,7 @@ namespace BarcodeBartenderApp
                 };
                 Process.Start(psi)?.WaitForExit(3000);
 
-                serialNumber++;
-                DatabaseHelper.SaveSerial(serialNumber);
+                DatabaseHelper.SaveSerial(serialNumber + 1);
             }
             catch (Exception ex)
             {
@@ -699,8 +726,7 @@ namespace BarcodeBartenderApp
             }
         }
 
-        // ── multiline PRN helpers (unchanged from before) ────────────────
-
+        // ── multiline PRN helpers ────────────────────────────────────────
         private static IEnumerable<string> SplitIntoChunks(string str, int chunkSize)
         {
             for (int i = 0; i < str.Length; i += chunkSize)
@@ -754,7 +780,6 @@ namespace BarcodeBartenderApp
         }
 
         // ── helpers ──────────────────────────────────────────────────────
-
         private void SetDispatchStatus(string text, Color color)
         {
             lblStatus.Text = text;
@@ -781,14 +806,10 @@ namespace BarcodeBartenderApp
 
         private void SendShiftReport()
         {
-            string file = GetCsvPath();
-            if (File.Exists(file))
-                EmailHelper.SendEmailAsync(file,
-                    $"Shift {currentShift} Report — {DateTime.Now:dd-MM-yyyy}");
+            ExportShiftDispatchCsv();
         }
 
-        // ── parts / PDF / progress (unchanged) ──────────────────────────
-
+        // ── parts / PDF ──────────────────────────────────────────────────
         private void LoadParts()
         {
             string previousPart = cmbPart.SelectedItem?.ToString() ?? "";
@@ -820,40 +841,12 @@ namespace BarcodeBartenderApp
             }
         }
 
-        private void UpdateProgress()
-        {
-            if (shiftTarget > 0)
-            {
-                int pct = Math.Min((shiftCount * 100) / shiftTarget, 100);
-                progressShift.Value = pct;
-                lblProgress.Text = $"Shift: {shiftCount} / {shiftTarget} ({pct}%)";
-                progressShift.ForeColor = pct >= 100 ? Color.Green : Color.FromArgb(0, 120, 215);
-            }
-            else
-            {
-                progressShift.Value = 0;
-                lblProgress.Text = $"Shift: {shiftCount} (No target set)";
-            }
-        }
-
         // ── buttons ──────────────────────────────────────────────────────
-
         private void btnClear_Click(object sender, EventArgs e) => lstStatus.Items.Clear();
-
-        private void btnReset_Click(object sender, EventArgs e)
-        {
-            if (MessageBox.Show("Reset today's count?", "Confirm",
-                MessageBoxButtons.YesNo) == DialogResult.Yes)
-            {
-                totalCount = 0; todayCount = 0; shiftCount = 0;
-                lblTotal.Text = "Total: 0"; lblToday.Text = "Today: 0";
-                UpdateProgress();
-            }
-        }
 
         private void btnAdmin_Click(object sender, EventArgs e)
         {
-            if (CurrentUser != "admin")
+            if (CurrentUser.ToLower() != "admin")
             {
                 MessageBox.Show("Only admin allowed!", "Access Denied",
                     MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -863,8 +856,6 @@ namespace BarcodeBartenderApp
             admin.ShowDialog();
             LoadParts(); LoadPDF();
             printerShareName = DatabaseHelper.GetConfig("PrinterShareName");
-            shiftTarget = DatabaseHelper.GetShiftTarget(currentShift);
-            UpdateProgress();
             LoadDispatchTokens();
         }
 
@@ -873,16 +864,13 @@ namespace BarcodeBartenderApp
             if (MessageBox.Show("Are you sure you want to logout?", "Confirm Logout",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
-                // Release any active dispatch lock
                 if (activeOrder != null)
                 {
                     DatabaseHelper.UnlockDispatchOrder(activeOrder.OrderNo);
                     activeOrder = null;
                 }
 
-                // Export shift dispatch summary CSV
                 ExportShiftDispatchCsv();
-
                 EmailHelper.SendEmailAsync(GetCsvPath(),
                     $"Logout Report — {CurrentUser} — {DateTime.Now:dd-MM-yyyy HH:mm}");
 
@@ -898,48 +886,17 @@ namespace BarcodeBartenderApp
             }
         }
 
-        private void ExportShiftDispatchCsv()
-        {
-            try
-            {
-                var orders = DatabaseHelper.GetDispatchOrders();
-                if (!orders.Any()) return;
-
-                string fileName = $"dispatch_shift_{currentShift}_{DateTime.Now:yyyy-MM-dd_HHmmss}.csv";
-                string filePath = Path.Combine(baseFolder, fileName);
-
-                var sb = new StringBuilder();
-                sb.AppendLine("OrderNo,CustomerName,PartName,QtyOrdered,QtyScanned,QtyPending,Status,DueDate,CompletedAt");
-                foreach (var o in orders)
-                    sb.AppendLine($"{o.OrderNo},{o.CustomerName},{o.PartName}," +
-                                  $"{o.QtyOrdered},{o.QtyScanned},{o.QtyPending}," +
-                                  $"{o.Status},{o.DueDate},{o.CompletedAt}");
-
-                File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
-
-                EmailHelper.SendEmailAsync(filePath,
-                    $"Shift {currentShift} Dispatch Summary — {DateTime.Now:dd-MM-yyyy}");
-            }
-            catch (Exception ex)
-            {
-                File.AppendAllText("error.log",
-                    $"[{DateTime.Now}] Shift dispatch CSV error: {ex.Message}\n");
-            }
-        }
         private void btnCancelOrder_Click(object sender, EventArgs e)
         {
             if (activeOrder == null) return;
-            if (MessageBox.Show($"Release order {activeOrder.OrderNo}?\nProgress will be saved.",
+            if (MessageBox.Show($"Release token {activeOrder.OrderNo}?\nProgress will be saved.",
                 "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
                 DatabaseHelper.UnlockDispatchOrder(activeOrder.OrderNo);
                 activeOrder = null;
-                lblActiveOrder.Text = "No order selected";
-                lblActiveCustomer.Text = "";
-                lblActivePart.Text = "";
-                lblActiveQty.Text = "";
-                progressDispatch.Value = 0;
-                SetDispatchStatus("READY", System.Drawing.Color.FromArgb(0, 120, 215));
+                UpdateTokenDashboard(null);
+                SetDispatchStatus("READY", Color.FromArgb(0, 120, 215));
+                UpdateTokenStatusBar();
                 LoadDispatchTokens();
                 txtScan.Focus();
             }
@@ -951,8 +908,18 @@ namespace BarcodeBartenderApp
             txtScan.Focus();
         }
 
-        private void btnOpenCsv_Click(object sender, EventArgs e) { }
-        private void btnTestMail_Click(object sender, EventArgs e) { }
+        private void btnOpenCsv_Click(object sender, EventArgs e)
+        {
+            string path = GetCsvPath();
+            if (File.Exists(path))
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+
+        private void btnTestMail_Click(object sender, EventArgs e)
+        {
+            EmailHelper.SendEmailAsync(GetCsvPath(), "Test Mail — Dispatch App");
+            MessageBox.Show("Test email queued.", "Mail", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
 
         private void cmbPart_SelectedIndexChanged(object sender, EventArgs e) => LoadPDF();
 
@@ -962,9 +929,11 @@ namespace BarcodeBartenderApp
         private void btnZoomOut_Click(object sender, EventArgs e) =>
             webView21.ZoomFactor = Math.Max(webView21.ZoomFactor - 0.1, 0.5);
 
+        // REQ-2: Refresh targets when admin closes (for any shift config changes)
+        public void RefreshShiftTarget() { /* no-op: shift target UI removed per REQ-4 */ }
+
         private void splitContainer1_Panel1_Paint(object sender, PaintEventArgs e) { }
     }
-
 
     // ── Graphics extension for rounded rectangles ─────────────────────────
     public static class GraphicsExtensions
@@ -994,6 +963,5 @@ namespace BarcodeBartenderApp
             path.CloseFigure();
             return path;
         }
-
     }
 }
