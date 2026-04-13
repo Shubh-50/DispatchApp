@@ -20,8 +20,8 @@ namespace BarcodeBartenderApp
             lblShift = new Label();
             btnAdmin = new Button();
             btnLogout = new Button();
+            picLogo = new PictureBox();
 
-            // REQ-5: Token status bar (replaces old panelStats with shift targets)
             panelStatusBar = new Panel();
             lblTokenStatusBar = new Label();
 
@@ -32,7 +32,6 @@ namespace BarcodeBartenderApp
             txtInspector = new TextBox();
             lblStatus = new Label();
 
-            // REQ-4: Active token dashboard panel (replaces old ActiveOrder panel)
             panelActiveOrder = new Panel();
             lblActiveOrderTitle = new Label();
             lblActiveOrder = new Label();
@@ -42,7 +41,6 @@ namespace BarcodeBartenderApp
             progressDispatch = new ProgressBar();
             btnCancelOrder = new Button();
 
-            // REQ-3: Token title bar + FlowLayoutPanel
             panelTokenTitle = new Panel();
             lblTokenTitle = new Label();
             btnRefreshTokens = new Button();
@@ -50,6 +48,7 @@ namespace BarcodeBartenderApp
 
             splitContainerRight = new SplitContainer();
             panelPartSop = new Panel();
+            panelSopToolbar = new Panel();
             lblPartLabel = new Label();
             cmbPart = new ComboBox();
             btnZoomIn = new Button();
@@ -80,7 +79,9 @@ namespace BarcodeBartenderApp
             splitContainerRight.Panel2.SuspendLayout();
             splitContainerRight.SuspendLayout();
             panelPartSop.SuspendLayout();
+            panelSopToolbar.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)webView21).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)picLogo).BeginInit();
             panelLog.SuspendLayout();
             SuspendLayout();
 
@@ -95,20 +96,28 @@ namespace BarcodeBartenderApp
             splitContainerMain.TabIndex = 0;
 
             // ── splitContainerLeft ───────────────────────────────────────
+            // FIX: SplitterDistance reduced so Panel1 (top controls) is compact
+            // and Panel2 (tokens) gets ample space with no gap.
             splitContainerLeft.Dock = DockStyle.Fill;
             splitContainerLeft.Location = new Point(0, 0);
             splitContainerLeft.Name = "splitContainerLeft";
             splitContainerLeft.Orientation = Orientation.Horizontal;
-            // REQ-3: Panel1 holds all controls above tokens; Panel2 holds tokens
-            // SplitterDistance increased to give tokens more vertical room
             splitContainerLeft.Panel1.Controls.Add(panelTopBar);
             splitContainerLeft.Panel1.Controls.Add(panelStatusBar);
             splitContainerLeft.Panel1.Controls.Add(panelScan);
             splitContainerLeft.Panel1.Controls.Add(panelActiveOrder);
-            splitContainerLeft.Panel2.Controls.Add(panelTokenTitle);
+            // FIX: flpTokens must be added FIRST, panelTokenTitle SECOND.
+            // WinForms Dock=Top processes in reverse add order — last added sits at top.
+            // panelTokenTitle (Dock=Top) added last = renders at top correctly,
+            // flpTokens (Dock=Fill) added first = fills remaining space below title.
             splitContainerLeft.Panel2.Controls.Add(flpTokens);
+            splitContainerLeft.Panel2.Controls.Add(panelTokenTitle);
             splitContainerLeft.Size = new Size(760, 860);
-            splitContainerLeft.SplitterDistance = 430;   // REQ-3: more space for tokens
+            // FIX: Panel1 = 44(topbar) + 28(statusbar) + 148(scan) + 210(active order) = 430
+            // But panelActiveOrder Dock=Fill causes layout bloat. Setting to exact stack height
+            // removes the gap. We remove Dock=Fill from panelActiveOrder and use fixed height.
+            splitContainerLeft.SplitterDistance = 370;
+            splitContainerLeft.IsSplitterFixed = true;   // FIX: prevent accidental drag
             splitContainerLeft.TabIndex = 0;
 
             // ── panelTopBar ──────────────────────────────────────────────
@@ -116,12 +125,22 @@ namespace BarcodeBartenderApp
             panelTopBar.Controls.Add(lblDateTime);
             panelTopBar.Controls.Add(lblUser);
             panelTopBar.Controls.Add(lblShift);
+            panelTopBar.Controls.Add(picLogo);
             panelTopBar.Controls.Add(btnAdmin);
             panelTopBar.Controls.Add(btnLogout);
             panelTopBar.Dock = DockStyle.Top;
             panelTopBar.Name = "panelTopBar";
             panelTopBar.Size = new Size(760, 44);
             panelTopBar.TabIndex = 0;
+
+            // ── picLogo — Hodek logo centered in top bar ──────────────────
+            picLogo.Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
+            picLogo.Location = new Point(430, 4);
+            picLogo.Name = "picLogo";
+            picLogo.Size = new Size(120, 36);
+            picLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            picLogo.BackColor = Color.Transparent;
+            picLogo.TabStop = false;
 
             lblDateTime.AutoSize = true;
             lblDateTime.Font = new Font("Segoe UI", 9.5F);
@@ -170,7 +189,7 @@ namespace BarcodeBartenderApp
             btnLogout.UseVisualStyleBackColor = false;
             btnLogout.Click += btnLogout_Click;
 
-            // ── REQ-5: panelStatusBar (token progress status bar) ─────────
+            // ── panelStatusBar ────────────────────────────────────────────
             panelStatusBar.BackColor = Color.FromArgb(230, 238, 255);
             panelStatusBar.Controls.Add(lblTokenStatusBar);
             panelStatusBar.Dock = DockStyle.Top;
@@ -244,7 +263,9 @@ namespace BarcodeBartenderApp
             lblStatus.Size = new Size(730, 22);
             lblStatus.Text = "READY";
 
-            // ── REQ-4: panelActiveOrder (Token Dashboard) ─────────────────
+            // ── panelActiveOrder (Token Dashboard) ────────────────────────
+            // FIX: Changed Dock from Fill to Top with fixed height = 150px.
+            // This eliminates the gap between status bar and token panel.
             panelActiveOrder.BackColor = Color.FromArgb(245, 250, 255);
             panelActiveOrder.Controls.Add(lblActiveOrderTitle);
             panelActiveOrder.Controls.Add(lblActiveOrder);
@@ -253,109 +274,105 @@ namespace BarcodeBartenderApp
             panelActiveOrder.Controls.Add(lblActiveQty);
             panelActiveOrder.Controls.Add(progressDispatch);
             panelActiveOrder.Controls.Add(btnCancelOrder);
-            panelActiveOrder.Dock = DockStyle.Fill;
+            panelActiveOrder.Dock = DockStyle.Top;     // FIX: was Fill
+            panelActiveOrder.Height = 150;             // FIX: fixed height, no wasted space
             panelActiveOrder.Name = "panelActiveOrder";
-            panelActiveOrder.Padding = new Padding(12);
+            panelActiveOrder.Padding = new Padding(12, 8, 12, 4);
             panelActiveOrder.TabIndex = 3;
 
             lblActiveOrderTitle.AutoSize = true;
             lblActiveOrderTitle.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             lblActiveOrderTitle.ForeColor = Color.FromArgb(30, 50, 100);
-            lblActiveOrderTitle.Location = new Point(12, 8);
+            lblActiveOrderTitle.Location = new Point(12, 6);
             lblActiveOrderTitle.Name = "lblActiveOrderTitle";
             lblActiveOrderTitle.Text = "Active Token";
 
-            // REQ-4: Token number
             lblActiveOrder.AutoSize = true;
             lblActiveOrder.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
             lblActiveOrder.ForeColor = Color.FromArgb(0, 80, 180);
-            lblActiveOrder.Location = new Point(12, 28);
+            lblActiveOrder.Location = new Point(12, 24);
             lblActiveOrder.Name = "lblActiveOrder";
             lblActiveOrder.Text = "No token selected";
 
-            // REQ-4: Customer name
             lblActiveCustomer.AutoSize = true;
             lblActiveCustomer.Font = new Font("Segoe UI", 9.5F);
             lblActiveCustomer.ForeColor = Color.FromArgb(60, 60, 80);
-            lblActiveCustomer.Location = new Point(12, 52);
+            lblActiveCustomer.Location = new Point(12, 48);
             lblActiveCustomer.Name = "lblActiveCustomer";
             lblActiveCustomer.Text = "—";
 
-            // REQ-4: Part number
             lblActivePart.AutoSize = true;
             lblActivePart.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             lblActivePart.ForeColor = Color.FromArgb(30, 70, 150);
-            lblActivePart.Location = new Point(12, 72);
+            lblActivePart.Location = new Point(12, 66);
             lblActivePart.Name = "lblActivePart";
             lblActivePart.Text = "—";
 
-            // REQ-4: Dispatched / Required / Remaining
             lblActiveQty.AutoSize = true;
-            lblActiveQty.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+            lblActiveQty.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
             lblActiveQty.ForeColor = Color.FromArgb(0, 120, 60);
-            lblActiveQty.Location = new Point(12, 95);
+            lblActiveQty.Location = new Point(12, 84);
             lblActiveQty.Name = "lblActiveQty";
             lblActiveQty.Text = "Dispatched: — / —  |  Remaining: —";
 
-            // REQ-4: Progress bar for dispatch quantity
             progressDispatch.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            progressDispatch.Location = new Point(12, 122);
+            progressDispatch.Location = new Point(12, 104);
             progressDispatch.Name = "progressDispatch";
-            progressDispatch.Size = new Size(724, 16);
+            progressDispatch.Size = new Size(700, 10);
             progressDispatch.Style = ProgressBarStyle.Continuous;
             progressDispatch.TabIndex = 5;
 
             btnCancelOrder.BackColor = Color.FromArgb(255, 240, 240);
             btnCancelOrder.FlatAppearance.BorderColor = Color.FromArgb(200, 100, 100);
             btnCancelOrder.FlatStyle = FlatStyle.Flat;
-            btnCancelOrder.Font = new Font("Segoe UI", 8.5F);
+            btnCancelOrder.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
             btnCancelOrder.ForeColor = Color.FromArgb(180, 30, 30);
-            btnCancelOrder.Location = new Point(12, 148);
+            btnCancelOrder.Location = new Point(12, 118);
             btnCancelOrder.Name = "btnCancelOrder";
-            btnCancelOrder.Size = new Size(140, 28);
-            btnCancelOrder.Text = "Cancel / Release";
+            btnCancelOrder.Size = new Size(160, 28);
+            btnCancelOrder.Text = "⊘  Cancel / Release";
             btnCancelOrder.UseVisualStyleBackColor = false;
             btnCancelOrder.Click += btnCancelOrder_Click;
 
-            // ── REQ-3: panelTokenTitle & flpTokens ───────────────────────
+            // ── panelTokenTitle & flpTokens ──────────────────────────────
             panelTokenTitle.BackColor = Color.FromArgb(235, 240, 250);
             panelTokenTitle.Controls.Add(lblTokenTitle);
             panelTokenTitle.Controls.Add(btnRefreshTokens);
             panelTokenTitle.Dock = DockStyle.Top;
             panelTokenTitle.Name = "panelTokenTitle";
-            panelTokenTitle.Size = new Size(760, 34);
+            panelTokenTitle.Size = new Size(760, 38);
             panelTokenTitle.TabIndex = 0;
 
             lblTokenTitle.AutoSize = true;
             lblTokenTitle.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
             lblTokenTitle.ForeColor = Color.FromArgb(30, 30, 80);
-            lblTokenTitle.Location = new Point(10, 8);
+            lblTokenTitle.Location = new Point(10, 10);
             lblTokenTitle.Name = "lblTokenTitle";
             lblTokenTitle.Text = "Dispatch Tokens";
 
             btnRefreshTokens.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnRefreshTokens.BackColor = Color.FromArgb(220, 230, 245);
             btnRefreshTokens.FlatStyle = FlatStyle.Flat;
-            btnRefreshTokens.Font = new Font("Segoe UI", 8F);
+            btnRefreshTokens.FlatAppearance.BorderColor = Color.FromArgb(160, 190, 230);
+            btnRefreshTokens.Font = new Font("Segoe UI", 8.5F, FontStyle.Bold);
             btnRefreshTokens.ForeColor = Color.FromArgb(30, 60, 120);
-            btnRefreshTokens.Location = new Point(672, 5);
+            btnRefreshTokens.Location = new Point(660, 5);
             btnRefreshTokens.Name = "btnRefreshTokens";
-            btnRefreshTokens.Size = new Size(80, 24);
-            btnRefreshTokens.Text = "↻ Refresh";
+            btnRefreshTokens.Size = new Size(94, 28);
+            btnRefreshTokens.Text = "↻  Refresh";
             btnRefreshTokens.UseVisualStyleBackColor = false;
             btnRefreshTokens.Click += btnRefreshTokens_Click;
 
-            // REQ-3: flpTokens — docked to Fill, AutoScroll, proper padding
-            // The Dock=Fill + DockStyle.Top on panelTokenTitle gives flpTokens
-            // all remaining vertical space — no clipping.
+            // FIX: flpTokens Dock=Fill fills ALL of Panel2 below panelTokenTitle.
+            // Padding top=4 ensures first card row is not clipped by splitter bar.
             flpTokens.AutoScroll = true;
+            flpTokens.AutoScrollMargin = new Size(0, 6);
             flpTokens.BackColor = Color.FromArgb(245, 246, 250);
             flpTokens.Dock = DockStyle.Fill;
             flpTokens.FlowDirection = FlowDirection.LeftToRight;
             flpTokens.WrapContents = true;
-            flpTokens.Location = new Point(0, 34);  // below title bar
             flpTokens.Name = "flpTokens";
-            flpTokens.Padding = new Padding(6);
+            flpTokens.Padding = new Padding(6, 6, 6, 6);
             flpTokens.TabIndex = 1;
 
             // ── splitContainerRight ──────────────────────────────────────
@@ -366,19 +383,30 @@ namespace BarcodeBartenderApp
             splitContainerRight.Panel1.Controls.Add(panelPartSop);
             splitContainerRight.Panel2.Controls.Add(panelLog);
             splitContainerRight.Size = new Size(636, 860);
-            splitContainerRight.SplitterDistance = 610;
+            // FIX-5: PDF viewer (Panel1) = ~70%, Log (Panel2) = ~30%
+            // At 860px height: 602 = 70%. We set this here and recalculate on resize.
+            splitContainerRight.SplitterDistance = 602;
+            splitContainerRight.IsSplitterFixed = false; // allow user to drag if needed
             splitContainerRight.TabIndex = 0;
 
             // ── panelPartSop ─────────────────────────────────────────────
             panelPartSop.BackColor = Color.White;
-            panelPartSop.Controls.Add(lblPartLabel);
-            panelPartSop.Controls.Add(cmbPart);
-            panelPartSop.Controls.Add(btnZoomIn);
-            panelPartSop.Controls.Add(btnZoomOut);
+            // FIX-3: panelSopToolbar holds label/combo/zoom buttons (Dock=Top, h=40)
+            // webView21 fills ALL remaining space via Dock=Fill — no hardcoded width
             panelPartSop.Controls.Add(webView21);
+            panelPartSop.Controls.Add(panelSopToolbar);
             panelPartSop.Dock = DockStyle.Fill;
             panelPartSop.Name = "panelPartSop";
             panelPartSop.TabIndex = 0;
+
+            panelSopToolbar.Controls.Add(lblPartLabel);
+            panelSopToolbar.Controls.Add(cmbPart);
+            panelSopToolbar.Controls.Add(btnZoomIn);
+            panelSopToolbar.Controls.Add(btnZoomOut);
+            panelSopToolbar.Dock = DockStyle.Top;
+            panelSopToolbar.Height = 40;
+            panelSopToolbar.Name = "panelSopToolbar";
+            panelSopToolbar.BackColor = Color.White;
 
             lblPartLabel.AutoSize = true;
             lblPartLabel.Font = new Font("Segoe UI", 8.5F);
@@ -415,13 +443,11 @@ namespace BarcodeBartenderApp
             btnZoomOut.Click += btnZoomOut_Click;
 
             webView21.AllowExternalDrop = true;
-            webView21.Anchor = AnchorStyles.Top | AnchorStyles.Bottom |
-                                                  AnchorStyles.Left | AnchorStyles.Right;
             webView21.CreationProperties = null;
             webView21.DefaultBackgroundColor = Color.White;
-            webView21.Location = new Point(0, 40);
+            // FIX-3: Dock=Fill makes webView fill entire panelPartSop below toolbar — no gap
+            webView21.Dock = DockStyle.Fill;
             webView21.Name = "webView21";
-            webView21.Size = new Size(636, 570);
             webView21.ZoomFactor = 1D;
 
             // ── panelLog ─────────────────────────────────────────────────
@@ -515,7 +541,10 @@ namespace BarcodeBartenderApp
             splitContainerRight.ResumeLayout(false);
             panelPartSop.ResumeLayout(false);
             panelPartSop.PerformLayout();
+            panelSopToolbar.ResumeLayout(false);
+            panelSopToolbar.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)webView21).EndInit();
+            ((System.ComponentModel.ISupportInitialize)picLogo).EndInit();
             panelLog.ResumeLayout(false);
             panelLog.PerformLayout();
             ResumeLayout(false);
@@ -530,18 +559,16 @@ namespace BarcodeBartenderApp
         private System.Windows.Forms.Label lblUser;
         private System.Windows.Forms.Label lblShift;
         private System.Windows.Forms.Button btnAdmin;
+        private System.Windows.Forms.PictureBox picLogo;
         private System.Windows.Forms.Button btnLogout;
-        // REQ-5
         private System.Windows.Forms.Panel panelStatusBar;
         private System.Windows.Forms.Label lblTokenStatusBar;
-        // Scan area
         private System.Windows.Forms.Panel panelScan;
         private System.Windows.Forms.Label lblScanTitle;
         private System.Windows.Forms.TextBox txtScan;
         private System.Windows.Forms.Label lblInspectorTitle;
         private System.Windows.Forms.TextBox txtInspector;
         private System.Windows.Forms.Label lblStatus;
-        // REQ-4: Active token dashboard
         private System.Windows.Forms.Panel panelActiveOrder;
         private System.Windows.Forms.Label lblActiveOrderTitle;
         private System.Windows.Forms.Label lblActiveOrder;
@@ -550,13 +577,12 @@ namespace BarcodeBartenderApp
         private System.Windows.Forms.Label lblActiveQty;
         private System.Windows.Forms.ProgressBar progressDispatch;
         private System.Windows.Forms.Button btnCancelOrder;
-        // REQ-3: Token panel
         private System.Windows.Forms.Panel panelTokenTitle;
         private System.Windows.Forms.Label lblTokenTitle;
         private System.Windows.Forms.Button btnRefreshTokens;
         private System.Windows.Forms.FlowLayoutPanel flpTokens;
-        // Right panel
         private System.Windows.Forms.Panel panelPartSop;
+        private System.Windows.Forms.Panel panelSopToolbar;
         private System.Windows.Forms.Label lblPartLabel;
         private System.Windows.Forms.ComboBox cmbPart;
         private System.Windows.Forms.Button btnZoomIn;

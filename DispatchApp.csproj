@@ -1,16 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <UseWindowsForms>true</UseWindowsForms>
-    <ImplicitUsings>enable</ImplicitUsings>
-  </PropertyGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<UseWindowsForms>true</UseWindowsForms>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<!-- Required for Microsoft.VisualBasic.Interaction.InputBox used in LoginForm -->
+		<UseVisualBasicRuntime>true</UseVisualBasicRuntime>
+	</PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
-    <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3856.49" />
+		<PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
+	</ItemGroup>
+
+	<!--
+    Hodek.jpg logo — place Hodek.jpg in the same folder as this .csproj file.
+    It will be automatically copied next to the .exe on every build and publish.
+    The app loads it at runtime from AppDomain.CurrentDomain.BaseDirectory.
+  -->
+	<ItemGroup>
+		<Content Include="Hodek.jpg">
+			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
+		</Content>
+	</ItemGroup>
 
 </Project>

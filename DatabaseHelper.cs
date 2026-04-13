@@ -302,33 +302,33 @@ namespace BarcodeBartenderApp
                         r["Receiver"]?.ToString() ?? "");
             return ("", "", "");
         }
-        
-            public static string GetAdminCredentialsInfo()
+
+        public static string GetAdminCredentialsInfo()
+        {
+            try
             {
-                try
+                using var con = new SQLiteConnection(
+                    $"Data Source={System.IO.Path.Combine(
+                        System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
+                        "BarcodeApp", "users.db")};Version=3;");
+                con.Open();
+
+                var cmd = new SQLiteCommand(
+                    "SELECT Username, Password FROM Users WHERE Username='admin' LIMIT 1", con);
+                var r = cmd.ExecuteReader();
+                if (r.Read())
                 {
-                    using var con = new SQLiteConnection(
-                        $"Data Source={System.IO.Path.Combine(
-                            System.Environment.GetFolderPath(System.Environment.SpecialFolder.MyDocuments),
-                            "BarcodeApp", "users.db")};Version=3;");
-                    con.Open();
-
-                    var cmd = new SQLiteCommand(
-                        "SELECT Username, Password FROM Users WHERE Username='admin' LIMIT 1", con);
-                    var r = cmd.ExecuteReader();
-                    if (r.Read())
-                    {
-                        string user = r["Username"]?.ToString() ?? "admin";
-                        string pass = r["Password"]?.ToString() ?? "(not set)";
-                        return $"Username: {user}\nPassword: {pass}";
-                    }
+                    string user = r["Username"]?.ToString() ?? "admin";
+                    string pass = r["Password"]?.ToString() ?? "(not set)";
+                    return $"Username: {user}\nPassword: {pass}";
                 }
-                catch { /* DB unavailable — fall back to master creds */ }
-
-                // Fallback to master access credentials
-                return "Username: Admin\nPassword: 5050\n\n(Emergency master access)";
             }
-        
+            catch { /* DB unavailable — fall back to master creds */ }
+
+            // Fallback to master access credentials
+            return "Username: Admin\nPassword: 5050\n\n(Emergency master access)";
+        }
+
 
         // ================= SHIFT =================
 
@@ -603,14 +603,17 @@ namespace BarcodeBartenderApp
             cmd.ExecuteNonQuery();
         }
 
-        public static List<DispatchOrder> GetDispatchOrders(bool todayOnly = false)
+        // Main form call: shows Done tokens (with Reprint button) until admin explicitly archives them
+        // Admin call (includeAll=true): returns every record including Archived
+        public static List<DispatchOrder> GetDispatchOrders(bool includeAll = false)
         {
             var list = new List<DispatchOrder>();
             using var con = new SQLiteConnection(connectionString);
             con.Open();
-            string filter = todayOnly
-                ? "WHERE Status != 'Done' OR DATE(CreatedDate)=DATE('now')"
-                : "";
+            // Only hide 'Archived' — Done tokens remain visible for reprint until admin clears them
+            string filter = includeAll
+                ? ""
+                : "WHERE Status != 'Archived'";
             var r = new SQLiteCommand(
                 $"SELECT * FROM DispatchOrders {filter} ORDER BY DueDate ASC, CreatedDate ASC", con)
                 .ExecuteReader();
@@ -709,6 +712,27 @@ namespace BarcodeBartenderApp
                 "DELETE FROM DispatchOrders WHERE OrderNo=@o", con);
             cmd.Parameters.AddWithValue("@o", orderNo);
             cmd.ExecuteNonQuery();
+        }
+
+        // FIX-2: Remove all Done tokens from main window panel (they stay in DB for admin records)
+        // This does NOT delete from DB — it just changes status to 'Archived' so admin still sees them
+        public static int ArchiveDoneOrders()
+        {
+            using var con = new SQLiteConnection(connectionString);
+            con.Open();
+            var cmd = new SQLiteCommand(
+                "UPDATE DispatchOrders SET Status='Archived' WHERE Status='Done'", con);
+            return cmd.ExecuteNonQuery();
+        }
+
+        // FIX-2: Admin can also hard-delete Done/Archived tokens if needed
+        public static int DeleteDoneOrders()
+        {
+            using var con = new SQLiteConnection(connectionString);
+            con.Open();
+            var cmd = new SQLiteCommand(
+                "DELETE FROM DispatchOrders WHERE Status='Done' OR Status='Archived'", con);
+            return cmd.ExecuteNonQuery();
         }
 
         public static void SaveDispatchScan(string orderNo, string barcode,

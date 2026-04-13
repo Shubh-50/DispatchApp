@@ -74,6 +74,16 @@ namespace BarcodeBartenderApp
             lblUser.Text = "User: " + CurrentUser;
             SetDispatchStatus("READY", Color.FromArgb(0, 120, 215));
 
+            // Load Hodek logo — from app folder (works in dev and after publish)
+            try
+            {
+                string logoPath = Path.Combine(
+                    AppDomain.CurrentDomain.BaseDirectory, "Hodek.jpg");
+                if (File.Exists(logoPath))
+                    picLogo.Image = Image.FromFile(logoPath);
+            }
+            catch { /* logo missing — silently skip, app still runs */ }
+
             currentShift = ShiftHelper.GetCurrentShift();
             lastShift = currentShift;
             mailSentForShift = currentShift;
@@ -109,6 +119,9 @@ namespace BarcodeBartenderApp
                 await webView21.CoreWebView2.ExecuteScriptAsync(js);
 
             this.BeginInvoke(new Action(() => LoadPDF()));
+            // FIX-5: Apply 70/30 ratio on load and keep it on resize
+            ApplyPdfLogRatio();
+            this.Resize += (s, ev) => ApplyPdfLogRatio();
             txtScan.Focus();
         }
 
@@ -347,16 +360,25 @@ namespace BarcodeBartenderApp
             var order = DatabaseHelper.GetDispatchOrder(orderNo);
             if (order == null) return;
 
+            // FIX-2: Completed tokens cannot be re-selected/re-edited
             if (order.Status == "Done")
             {
-                MessageBox.Show($"Token {orderNo} is already completed.", "Done",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(
+                    $"Token {orderNo} is already completed and locked.\n\nCompleted tokens cannot be re-opened.",
+                    "Token Completed", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Release previous lock
+            // FIX-1: If a different token is already active, block switching — user must complete or release first
             if (activeOrder != null && activeOrder.OrderNo != orderNo)
-                DatabaseHelper.UnlockDispatchOrder(activeOrder.OrderNo);
+            {
+                MessageBox.Show(
+                    $"Token  '{activeOrder.OrderNo}'  is currently active.\n\n" +
+                    "Please complete the current token or press the  [ Release Token ]  button\n" +
+                    "to save progress and release it before selecting another token.",
+                    "Token Already Active", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             // Check if locked by another operator
             if (!string.IsNullOrEmpty(order.LockedBy) && order.LockedBy != CurrentUser)
@@ -788,7 +810,7 @@ namespace BarcodeBartenderApp
 
         private Color GetDueColour(string dueDateStr, string status)
         {
-            if (status == "Done") return Color.FromArgb(60, 160, 60);
+            if (status == "Done" || status == "Archived") return Color.FromArgb(60, 160, 60);
             if (!DateTime.TryParse(dueDateStr, out DateTime due)) return Color.Gray;
             int daysLeft = (due.Date - DateTime.Today).Days;
             int yellow = int.TryParse(DatabaseHelper.GetConfig("YellowDaysBeforeDue"), out int y) ? y : 1;
@@ -864,6 +886,7 @@ namespace BarcodeBartenderApp
             if (MessageBox.Show("Are you sure you want to logout?", "Confirm Logout",
                 MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
             {
+                // Release any active token lock
                 if (activeOrder != null)
                 {
                     DatabaseHelper.UnlockDispatchOrder(activeOrder.OrderNo);
@@ -875,14 +898,11 @@ namespace BarcodeBartenderApp
                     $"Logout Report — {CurrentUser} — {DateTime.Now:dd-MM-yyyy HH:mm}");
 
                 timerClock.Stop();
-                LoginForm login = new LoginForm();
-                this.Hide();
-                if (login.ShowDialog() == DialogResult.OK)
-                {
-                    var newForm = new Form1(login.LoggedUser);
-                    newForm.Show();
-                }
-                this.Close();
+                timerClock.Dispose();
+
+                // FIX-3: Application.Restart cleanly restarts the process and shows
+                // the login screen fresh — avoids WebView2/timer handle crash on re-login.
+                Application.Restart();
             }
         }
 
@@ -931,6 +951,17 @@ namespace BarcodeBartenderApp
 
         // REQ-2: Refresh targets when admin closes (for any shift config changes)
         public void RefreshShiftTarget() { /* no-op: shift target UI removed per REQ-4 */ }
+
+        // FIX-5: Maintain 70% PDF viewer / 30% log panel ratio on resize
+        private void ApplyPdfLogRatio()
+        {
+            int total = splitContainerRight.Height;
+            if (total < 100) return;
+            int target = (int)(total * 0.70);
+            int min = splitContainerRight.Panel1MinSize;
+            int max = total - splitContainerRight.Panel2MinSize - splitContainerRight.SplitterWidth;
+            splitContainerRight.SplitterDistance = Math.Max(min, Math.Min(target, max));
+        }
 
         private void splitContainer1_Panel1_Paint(object sender, PaintEventArgs e) { }
     }

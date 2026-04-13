@@ -233,7 +233,8 @@ namespace BarcodeBartenderApp
         private void LoadDispatchOrders()
         {
             lstDispatchOrders.Items.Clear();
-            var orders = DatabaseHelper.GetDispatchOrders();
+            // FIX-2: Admin sees ALL orders including Done/Archived for full records view
+            var orders = DatabaseHelper.GetDispatchOrders(includeAll: true);
             foreach (var o in orders)
             {
                 var item = new ListViewItem(o.OrderNo);
@@ -250,7 +251,8 @@ namespace BarcodeBartenderApp
 
         private System.Drawing.Color GetDueColour(string dueDateStr, string status)
         {
-            if (status == "Done") return System.Drawing.Color.FromArgb(60, 160, 60);
+            if (status == "Done" || status == "Archived")
+                return System.Drawing.Color.FromArgb(60, 160, 60);
             if (!DateTime.TryParse(dueDateStr, out DateTime due))
                 return System.Drawing.Color.Gray;
             int daysLeft = (due.Date - DateTime.Today).Days;
@@ -315,6 +317,47 @@ namespace BarcodeBartenderApp
             }
         }
 
+        // FIX-2: Admin clears Done tokens from the main window card panel
+        // (archives them — they still show in admin records list above)
+        private void btnClearDoneTokens_Click(object sender, EventArgs e)
+        {
+            int count = DatabaseHelper.GetDispatchOrders(includeAll: true)
+                .Count(o => o.Status == "Done");
+
+            if (count == 0)
+            {
+                MessageBox.Show("No completed tokens to clear.", "Nothing to Clear",
+                MessageBoxButtons.OK, MessageBoxIcon.Information); return;
+            }
+
+            var result = MessageBox.Show(
+                $"Archive {count} completed token(s) from the main window?\n\n" +
+                "They will remain visible here in Admin for records.\n" +
+                "Press YES to archive (recommended) or NO to permanently delete.",
+                "Clear Done Tokens", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+
+            if (result == DialogResult.Yes)
+            {
+                DatabaseHelper.ArchiveDoneOrders();
+                MessageBox.Show($"{count} token(s) archived ✅\nThey are still visible in Admin records.",
+                    "Done", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else if (result == DialogResult.No)
+            {
+                if (MessageBox.Show("Permanently DELETE all completed/archived tokens?\nThis cannot be undone!",
+                    "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                {
+                    DatabaseHelper.DeleteDoneOrders();
+                    MessageBox.Show($"{count} token(s) permanently deleted ✅",
+                        "Deleted", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+
+            LoadDispatchOrders();
+            foreach (Form f in Application.OpenForms)
+                if (f is Form1 mf) { mf.BeginInvoke(new Action(() => mf.LoadDispatchTokens())); break; }
+        }
+
         private void btnRefreshOrders_Click(object sender, EventArgs e) => LoadDispatchOrders();
 
         // ── Token edit support ─────────────────────────────────────────────
@@ -332,17 +375,48 @@ namespace BarcodeBartenderApp
             var order = DatabaseHelper.GetDispatchOrder(orderNo);
             if (order == null) return;
 
+            // FIX-2: Completed tokens are view-only — no editing allowed
+            if (order.Status == "Done")
+            {
+                ResetEditMode();
+                txtOrderCustomer.Text = order.CustomerName;
+                txtOrderPart.Text = order.PartName;
+                txtOrderQRRef.Text = order.QRReference;
+                txtOrderQty.Text = order.QtyOrdered.ToString();
+                if (DateTime.TryParse(order.DueDate, out DateTime due))
+                    dtpOrderDue.Value = due;
+
+                // Keep fields read-only for Done tokens
+                txtOrderCustomer.ReadOnly = true;
+                txtOrderPart.ReadOnly = true;
+                txtOrderQRRef.ReadOnly = true;
+                txtOrderQty.ReadOnly = true;
+                btnEditOrder.Enabled = false;
+                btnCreateOrder.Enabled = false;
+
+                MessageBox.Show(
+                    $"Token '{orderNo}' is completed.\nCompleted tokens cannot be edited.",
+                    "View Only", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Re-enable fields if previously locked
+            txtOrderCustomer.ReadOnly = false;
+            txtOrderPart.ReadOnly = false;
+            txtOrderQRRef.ReadOnly = false;
+            txtOrderQty.ReadOnly = false;
+
             // Populate fields
             txtOrderCustomer.Text = order.CustomerName;
-            txtOrderPart.Text     = order.PartName;
-            txtOrderQRRef.Text    = order.QRReference;
-            txtOrderQty.Text      = order.QtyOrdered.ToString();
-            if (DateTime.TryParse(order.DueDate, out DateTime due))
-                dtpOrderDue.Value = due;
+            txtOrderPart.Text = order.PartName;
+            txtOrderQRRef.Text = order.QRReference;
+            txtOrderQty.Text = order.QtyOrdered.ToString();
+            if (DateTime.TryParse(order.DueDate, out DateTime dueDate))
+                dtpOrderDue.Value = dueDate;
 
             // Enter edit mode
-            _editingOrderNo        = orderNo;
-            btnEditOrder.Enabled   = true;
+            _editingOrderNo = orderNo;
+            btnEditOrder.Enabled = true;
             btnCreateOrder.Enabled = false;
         }
 
@@ -353,8 +427,8 @@ namespace BarcodeBartenderApp
 
             string customer = txtOrderCustomer.Text.Trim();
             string partName = txtOrderPart.Text.Trim();
-            string qrRef    = txtOrderQRRef.Text.Trim();
-            string dueDate  = dtpOrderDue.Value.ToString("yyyy-MM-dd");
+            string qrRef = txtOrderQRRef.Text.Trim();
+            string dueDate = dtpOrderDue.Value.ToString("yyyy-MM-dd");
 
             if (string.IsNullOrEmpty(customer) || string.IsNullOrEmpty(partName) || string.IsNullOrEmpty(qrRef))
             { MessageBox.Show("Fill in Customer, Part Name and QR Reference ❌"); return; }
@@ -379,13 +453,19 @@ namespace BarcodeBartenderApp
 
         private void ResetEditMode()
         {
-            _editingOrderNo        = "";
-            btnEditOrder.Enabled   = false;
+            _editingOrderNo = "";
+            btnEditOrder.Enabled = false;
             btnCreateOrder.Enabled = true;
             txtOrderCustomer.Clear(); txtOrderPart.Clear();
-            txtOrderQRRef.Clear();    txtOrderQty.Clear();
+            txtOrderQRRef.Clear(); txtOrderQty.Clear();
             dtpOrderDue.Value = DateTime.Today.AddDays(1);
             lstDispatchOrders.SelectedItems.Clear();
+
+            // FIX-2: Always re-enable fields when resetting
+            txtOrderCustomer.ReadOnly = false;
+            txtOrderPart.ReadOnly = false;
+            txtOrderQRRef.ReadOnly = false;
+            txtOrderQty.ReadOnly = false;
         }
 
         // ===== CUSTOMER PRN EDITOR =====

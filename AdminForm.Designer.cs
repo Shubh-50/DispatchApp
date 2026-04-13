@@ -97,6 +97,7 @@ namespace BarcodeBartenderApp
             this.btnCreateOrder = new System.Windows.Forms.Button();
             this.btnDeleteOrder = new System.Windows.Forms.Button();
             this.btnRefreshOrders = new System.Windows.Forms.Button();
+            this.btnClearDoneTokens = new System.Windows.Forms.Button();
             this.btnEditOrder = new System.Windows.Forms.Button();
             this.btnNewOrder = new System.Windows.Forms.Button();
 
@@ -458,6 +459,15 @@ namespace BarcodeBartenderApp
             this.btnRefreshOrders.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
             this.btnRefreshOrders.Click += new System.EventHandler(this.btnRefreshOrders_Click);
 
+            // FIX-2: Clear Done Tokens button — archives completed tokens from main window
+            this.btnClearDoneTokens.Location = new System.Drawing.Point(dx + 580, dy + 54);
+            this.btnClearDoneTokens.Size = new System.Drawing.Size(140, 34);
+            this.btnClearDoneTokens.Text = "🧹 Clear Done Tokens";
+            this.btnClearDoneTokens.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnClearDoneTokens.BackColor = System.Drawing.Color.FromArgb(255, 240, 200);
+            this.btnClearDoneTokens.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.btnClearDoneTokens.Click += new System.EventHandler(this.btnClearDoneTokens_Click);
+
             this.tabDispatch.Controls.AddRange(new System.Windows.Forms.Control[] {
                 this.lstDispatchOrders,
                 this.lblOrderCustomer, this.txtOrderCustomer,
@@ -466,7 +476,7 @@ namespace BarcodeBartenderApp
                 this.lblOrderQty,      this.txtOrderQty,
                 this.lblOrderDue,      this.dtpOrderDue,
                 this.btnCreateOrder,   this.btnEditOrder,   this.btnNewOrder,
-                this.btnDeleteOrder,   this.btnRefreshOrders });
+                this.btnDeleteOrder,   this.btnRefreshOrders, this.btnClearDoneTokens });
 
             // ════════════════════════════════════════════════════════════
             // TAB: CUSTOMER PRN
@@ -587,7 +597,7 @@ namespace BarcodeBartenderApp
         private System.Windows.Forms.TextBox txtOrderQRRef, txtOrderQty;
         private System.Windows.Forms.DateTimePicker dtpOrderDue;
         private System.Windows.Forms.Button btnCreateOrder, btnDeleteOrder, btnRefreshOrders;
-        private System.Windows.Forms.Button btnEditOrder, btnNewOrder;
+        private System.Windows.Forms.Button btnEditOrder, btnNewOrder, btnClearDoneTokens;
         private System.Windows.Forms.ComboBox cmbCustomerPrn;
         private System.Windows.Forms.TextBox txtCustomerPrnEditor, txtCustomerPrnPath;
         private System.Windows.Forms.Button btnCustomerPrnLoad, btnCustomerPrnSave, btnRefreshCustomerPrn;
